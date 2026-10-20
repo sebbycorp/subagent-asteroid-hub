@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,8 +47,12 @@ func TestLiveChatCycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.DeleteSession(ctx, id) })
-	if err := c.Chat(ctx, id, "Reply with just the word pong."); err != nil {
+	res, err := c.Chat(ctx, id, "Reply with just the word pong.")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(strings.ToLower(res.Reply), "pong") || res.TaskID == "" {
+		t.Fatalf("chat result %+v", res)
 	}
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
@@ -64,4 +69,34 @@ func TestLiveChatCycle(t *testing.T) {
 		time.Sleep(250 * time.Millisecond)
 	}
 	t.Fatal("actor never reached suspended")
+}
+
+func TestLiveCheckpointFork(t *testing.T) {
+	ctx := context.Background()
+	c := liveClient(t)
+	id, err := c.CreateSession(ctx, traffic.AgentRef{Namespace: "kagent", Name: "hello-substrate"}, fmt.Sprintf("asteroids-it-%d", time.Now().Unix()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.DeleteSession(ctx, id) })
+	res, err := c.Chat(ctx, id, "Remember: the code word is ORION. Reply only OK.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ck, err := c.Checkpoint(ctx, id, res.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fork, err := c.Fork(ctx, ck, "asteroids-it-fork")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.DeleteSession(ctx, fork) })
+	ans, err := c.Chat(ctx, fork, "What was the code word? Reply with just the word.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.ToUpper(ans.Reply), "ORION") {
+		t.Fatalf("fork forgot: %+v", ans)
+	}
 }

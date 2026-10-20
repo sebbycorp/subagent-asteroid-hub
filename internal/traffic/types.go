@@ -8,6 +8,12 @@ type AgentRef struct {
 	Name      string
 }
 
+// ChatResult is what one chat turn produced.
+type ChatResult struct {
+	Reply  string // the agent's reply text
+	TaskID string // the A2A task of the turn (a checkpoint's head)
+}
+
 // SessionInfo is one kagent session as the traffic generator sees it.
 type SessionInfo struct {
 	ID        string

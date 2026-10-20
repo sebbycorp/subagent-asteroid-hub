@@ -57,14 +57,14 @@ func (f *fakeClient) DeleteSession(_ context.Context, id string) error {
 	f.deleted = append(f.deleted, id)
 	return nil
 }
-func (f *fakeClient) Chat(_ context.Context, id, _ string) error {
+func (f *fakeClient) Chat(_ context.Context, id, _ string) (ChatResult, error) {
 	if f.chatGate != nil {
 		<-f.chatGate
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.chats = append(f.chats, id)
-	return f.chatErr[id]
+	return ChatResult{Reply: "ok", TaskID: "task-" + id}, f.chatErr[id]
 }
 func (f *fakeClient) ListHarnesses(context.Context) ([]string, error) { return f.harnesses, nil }
 func (f *fakeClient) CreateAgent(_ context.Context, a AgentRef, harness, model, prompt string) error {

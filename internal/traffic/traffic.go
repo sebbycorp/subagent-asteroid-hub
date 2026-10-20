@@ -19,7 +19,7 @@ type Client interface {
 	ListSessions(ctx context.Context) ([]SessionInfo, error)
 	CreateSession(ctx context.Context, a AgentRef, name string) (string, error)
 	DeleteSession(ctx context.Context, id string) error
-	Chat(ctx context.Context, sessionID, text string) error
+	Chat(ctx context.Context, sessionID, text string) (ChatResult, error)
 	ListHarnesses(ctx context.Context) ([]string, error)
 	CreateAgent(ctx context.Context, a AgentRef, harness, modelConfig, systemPrompt string) error
 }
@@ -328,7 +328,7 @@ func (g *Generator) pickSession(ctx context.Context, c Client, a AgentRef, picke
 func (g *Generator) chat(ctx context.Context, c Client, id, text string) {
 	defer g.wg.Done()
 	g.m.MarkSent(id, g.o.Now())
-	err := c.Chat(ctx, id, text)
+	_, err := c.Chat(ctx, id, text)
 	g.m.MarkTurnEnded(id, g.o.Now())
 	g.mu.Lock()
 	g.inFlight--

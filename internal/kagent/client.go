@@ -46,6 +46,8 @@ type Client struct {
 	agents   apiv1.AgentServiceClient
 	harness  apiv1.HarnessServiceClient
 
+	checkpoints apiv1.CheckpointServiceClient
+
 	mu        sync.Mutex
 	slowAt    time.Time
 	pools     []model.Pool
@@ -98,6 +100,8 @@ func Dial(o Options) (*Client, error) {
 		sessions: apiv1.NewSessionServiceClient(conn),
 		agents:   apiv1.NewAgentServiceClient(conn),
 		harness:  apiv1.NewHarnessServiceClient(conn),
+
+		checkpoints: apiv1.NewCheckpointServiceClient(conn),
 	}, nil
 }
 
@@ -294,21 +298,87 @@ func (c *Client) DeleteSession(ctx context.Context, id string) error {
 }
 
 // Chat sends one message to a session over A2A and returns when the reply
-// stream ends (the agent's turn is over).
-func (c *Client) Chat(ctx context.Context, sessionID, text string) error {
+// stream ends (the agent's turn is over), with the reply text and task ID.
+func (c *Client) Chat(ctx context.Context, sessionID, text string) (traffic.ChatResult, error) {
 	cctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	a2a, err := c.gw.A2A.ForSession(cctx, sessionID)
 	if err != nil {
-		return sessionErr("a2a client", err)
+		return traffic.ChatResult{}, sessionErr("a2a client", err)
 	}
 	msg := a2atype.NewMessage(a2atype.MessageRoleUser, a2atype.NewTextPart(text))
-	for _, err := range a2a.SendStreamingMessage(cctx, &a2atype.SendMessageRequest{Message: msg}) {
+	var rc replyCollector
+	for ev, err := range a2a.SendStreamingMessage(cctx, &a2atype.SendMessageRequest{Message: msg}) {
 		if err != nil {
-			return sessionErr("a2a stream", err)
+			return traffic.ChatResult{Reply: rc.text(), TaskID: rc.taskID}, sessionErr("a2a stream", err)
+		}
+		if ev != nil {
+			rc.apply(ev)
 		}
 	}
-	return nil
+	return traffic.ChatResult{Reply: rc.text(), TaskID: rc.taskID}, nil
+}
+
+// Checkpoint saves a named point in a session's history (at the given turn)
+// and waits until it is ready to fork from. It returns the checkpoint ID.
+func (c *Client) Checkpoint(ctx context.Context, sessionID, headTaskID string) (string, error) {
+	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	// A checkpoint is built on the turn's suspend snapshot, so until Substrate
+	// has written it the API answers FailedPrecondition: retry until then.
+	req := &apiv1.CreateCheckpointRequest{SessionId: sessionID, RequestId: uuid.NewString(), ExpectedHeadTaskId: headTaskID}
+	var resp *apiv1.CreateCheckpointResponse
+	var err error
+	for {
+		resp, err = c.checkpoints.CreateCheckpoint(cctx, req)
+		if status.Code(err) != codes.FailedPrecondition {
+			break
+		}
+		select {
+		case <-cctx.Done():
+			return "", fmt.Errorf("create checkpoint: %w", err)
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+	if err != nil {
+		return "", fmt.Errorf("create checkpoint: %w", err)
+	}
+	ck := resp.GetCheckpoint()
+	for ck.GetState() == apiv1.CheckpointState_CHECKPOINT_STATE_CREATING {
+		select {
+		case <-cctx.Done():
+			return "", fmt.Errorf("checkpoint %s not ready: %w", ck.GetId(), cctx.Err())
+		case <-time.After(250 * time.Millisecond):
+		}
+		list, err := c.checkpoints.ListCheckpoints(cctx, &apiv1.ListCheckpointsRequest{SessionId: sessionID})
+		if err != nil {
+			return "", fmt.Errorf("list checkpoints: %w", err)
+		}
+		for _, x := range list.GetCheckpoints() {
+			if x.GetId() == ck.GetId() {
+				ck = x
+			}
+		}
+	}
+	if ck.GetState() != apiv1.CheckpointState_CHECKPOINT_STATE_READY {
+		return "", fmt.Errorf("checkpoint %s is %s", ck.GetId(), ck.GetState())
+	}
+	return ck.GetId(), nil
+}
+
+// Fork starts a new session from a checkpoint and names it.
+func (c *Client) Fork(ctx context.Context, checkpointID, name string) (string, error) {
+	cctx, cancel := callCtx(ctx)
+	defer cancel()
+	resp, err := c.checkpoints.ForkSession(cctx, &apiv1.ForkSessionRequest{CheckpointId: checkpointID, RequestId: uuid.NewString()})
+	if err != nil {
+		return "", fmt.Errorf("fork session: %w", err)
+	}
+	id := resp.GetSession().GetId()
+	if _, err := c.sessions.UpdateSessionName(cctx, &apiv1.UpdateSessionNameRequest{SessionId: id, Name: name}); err != nil {
+		return id, fmt.Errorf("name forked session: %w", err)
+	}
+	return id, nil
 }
 
 // sessionErr wraps a chat error, marking a missing session as
