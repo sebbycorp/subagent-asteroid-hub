@@ -19,4 +19,4 @@ run:
 	docker run --rm --name substrate-asteroids -p 127.0.0.1:7790:7790 -e KAGENT_API=$(KAGENT_API) $(IMAGE)
 
 dev:
-	KAGENT_API=http://localhost:8083 go run ./cmd/asteroids
+	LISTEN_ADDR=127.0.0.1:7790 KAGENT_API=http://localhost:8083 go run ./cmd/asteroids
