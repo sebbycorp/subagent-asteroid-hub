@@ -5,13 +5,21 @@ import (
 	"strings"
 )
 
+// InstantMS is the time-to-suspend below which the caption says "the
+// instant the turn ended": below it the number is within clock noise.
+const InstantMS = 10
+
 // Caption is the plain-English, upper-case line shown for an event.
 func Caption(e Event) string {
 	a := strings.ToUpper(e.Agent)
 	var s string
 	switch e.Kind {
 	case EventCreate:
-		s = fmt.Sprintf("NEW SESSION FOR %s. SUBSTRATE STARTS A FRESH SANDBOX ON %s.", a, strings.ToUpper(e.Pool))
+		s = fmt.Sprintf("NEW SESSION FOR %s. SUBSTRATE STARTS A FRESH SANDBOX", a)
+		if e.Pool != "" {
+			s += " ON " + strings.ToUpper(e.Pool)
+		}
+		s += "."
 	case EventResume:
 		s = fmt.Sprintf("RESUME. %s'S SNAPSHOT COMES BACK FROM STORAGE ONTO A WORKER.", a)
 	case EventRunning:
@@ -22,7 +30,11 @@ func Caption(e Event) string {
 		s += "."
 	case EventSuspend:
 		s = fmt.Sprintf("TURN DONE. SUBSTRATE FROZE %s TO STORAGE", a)
-		if e.SuspendMS != nil {
+		switch {
+		case e.SuspendMS == nil:
+		case *e.SuspendMS <= InstantMS:
+			s += " THE INSTANT THE TURN ENDED"
+		default:
 			s += fmt.Sprintf(" %d MS AFTER THE TURN", *e.SuspendMS)
 		}
 		s += ". WORKER FREED."

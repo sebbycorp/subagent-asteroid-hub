@@ -46,6 +46,16 @@ type State struct {
 
 const subBuffer = 256
 
+// holdFor is how long a suspend is held waiting for the chat's turn-end mark:
+// Substrate often suspends within milliseconds of the reply stream ending.
+const holdFor = time.Second
+
+type heldSuspend struct {
+	e        model.Event
+	session  string
+	deadline time.Time
+}
+
 // Hub owns the current state. All methods are safe for concurrent use.
 type Hub struct {
 	mu        sync.Mutex
@@ -55,7 +65,10 @@ type Hub struct {
 	seq       uint64
 	sent      map[string]time.Time
 	turnEnded map[string]time.Time
+	chatting  map[string]bool // sent, turn not yet ended
+	held      map[string]heldSuspend
 	subs      map[chan []byte]struct{}
+	now       func() time.Time
 }
 
 // New creates a hub reading from src.
@@ -65,7 +78,10 @@ func New(src Source, env string) *Hub {
 		state:     State{Env: env, Snapshot: model.Snapshot{Actors: map[string]model.Actor{}}},
 		sent:      map[string]time.Time{},
 		turnEnded: map[string]time.Time{},
+		chatting:  map[string]bool{},
+		held:      map[string]heldSuspend{},
 		subs:      map[chan []byte]struct{}{},
+		now:       time.Now,
 	}
 }
 
@@ -75,6 +91,7 @@ func (h *Hub) SetSource(src Source, env string) {
 	h.src, h.prev = src, model.Snapshot{}
 	h.state = State{Env: env, Snapshot: model.Snapshot{Actors: map[string]model.Actor{}}, Waves: h.state.Waves}
 	h.sent, h.turnEnded = map[string]time.Time{}, map[string]time.Time{}
+	h.chatting, h.held = map[string]bool{}, map[string]heldSuspend{}
 	h.mu.Unlock()
 }
 
@@ -82,14 +99,20 @@ func (h *Hub) SetSource(src Source, env string) {
 func (h *Hub) MarkSent(sessionID string, at time.Time) {
 	h.mu.Lock()
 	h.sent[sessionID] = at
+	h.chatting[sessionID] = true
 	h.mu.Unlock()
 }
 
 // MarkTurnEnded records when a chat's reply stream ended.
 func (h *Hub) MarkTurnEnded(sessionID string, at time.Time) {
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.turnEnded[sessionID] = at
-	h.mu.Unlock()
+	delete(h.chatting, sessionID)
+	if hs, ok := h.held[sessionID]; ok {
+		delete(h.held, sessionID)
+		h.releaseLocked([]model.Event{hs.e}, h.state.Snapshot)
+	}
 }
 
 // SetWaves updates the traffic status shown on screen.
@@ -140,12 +163,44 @@ func (h *Hub) Tick(ctx context.Context) {
 		h.broadcastLocked(h.stateMsgLocked())
 		return
 	}
-	evs := model.Diff(h.prev, snap)
-	for i := range evs {
-		h.enrichLocked(&evs[i], snap)
+	now := h.now()
+	var out []model.Event
+	for session, hs := range h.held {
+		if now.After(hs.deadline) {
+			delete(h.held, session)
+			out = append(out, hs.e)
+		}
+	}
+	for _, e := range model.Diff(h.prev, snap) {
+		session := h.sessionLocked(e.ActorUID, snap)
+		if hs, ok := h.held[session]; ok { // newer news for this actor: release first
+			delete(h.held, session)
+			out = append(out, hs.e)
+		}
+		if e.Kind == model.EventSuspend && h.chatting[session] {
+			h.held[session] = heldSuspend{e: e, session: session, deadline: now.Add(holdFor)}
+			continue
+		}
+		out = append(out, e)
 	}
 	h.prev = snap
 	h.state.Connected, h.state.Error, h.state.Snapshot = true, "", snap
+	h.releaseLocked(out, snap)
+}
+
+func (h *Hub) sessionLocked(uid string, snap model.Snapshot) string {
+	if s := snap.Actors[uid].SessionID; s != "" {
+		return s
+	}
+	return h.prev.Actors[uid].SessionID
+}
+
+// releaseLocked numbers, measures and captions events, then broadcasts the
+// state followed by the events.
+func (h *Hub) releaseLocked(evs []model.Event, snap model.Snapshot) {
+	for i := range evs {
+		h.enrichLocked(&evs[i], snap)
+	}
 	h.broadcastLocked(h.stateMsgLocked())
 	for _, e := range evs {
 		b, _ := json.Marshal(map[string]any{"type": "event", "event": e})
@@ -153,21 +208,23 @@ func (h *Hub) Tick(ctx context.Context) {
 	}
 }
 
+// skewMS is how far the cluster's clock may trail the app's; readings
+// within it count as zero rather than unknown.
+const skewMS = 50
+
 func msBetween(from, to time.Time) *int64 {
 	d := to.Sub(from).Milliseconds()
-	if d < 0 {
+	if d < -skewMS {
 		return nil
 	}
+	d = max(d, 0)
 	return &d
 }
 
 func (h *Hub) enrichLocked(e *model.Event, snap model.Snapshot) {
 	h.seq++
 	e.Seq = h.seq
-	session := snap.Actors[e.ActorUID].SessionID
-	if session == "" {
-		session = h.prev.Actors[e.ActorUID].SessionID
-	}
+	session := h.sessionLocked(e.ActorUID, snap)
 	st := &h.state.Stats
 	switch e.Kind {
 	case model.EventCreate:

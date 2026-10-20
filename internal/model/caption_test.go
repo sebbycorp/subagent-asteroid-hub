@@ -41,3 +41,19 @@ func TestCaptionOtherKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestCaptionCreateWithoutPool(t *testing.T) {
+	got := Caption(Event{Kind: EventCreate, Agent: "coder"})
+	want := "NEW SESSION FOR CODER. SUBSTRATE STARTS A FRESH SANDBOX."
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestCaptionSuspendInstant(t *testing.T) {
+	got := Caption(Event{Kind: EventSuspend, Agent: "coder", SuspendMS: ms(8)})
+	want := "TURN DONE. SUBSTRATE FROZE CODER TO STORAGE THE INSTANT THE TURN ENDED. WORKER FREED."
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}

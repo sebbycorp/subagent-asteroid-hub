@@ -22,7 +22,9 @@ func Diff(prev, cur Snapshot) []Event {
 		p, existed := prev.Actors[uid]
 		var kinds []EventKind
 		switch {
-		case !existed && active(c.State):
+		case !existed && c.State == StateRunning:
+			kinds = []EventKind{EventCreate, EventRunning}
+		case !existed && c.State == StateResuming:
 			kinds = []EventKind{EventCreate}
 		case !existed && suspended(c.State):
 			kinds = []EventKind{EventCreate, EventSuspend}

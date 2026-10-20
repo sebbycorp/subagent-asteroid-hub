@@ -98,7 +98,7 @@ func TestHubFirstTickNoEvents(t *testing.T) {
 }
 
 func TestHubEmitsCaptionedEventsWithSeq(t *testing.T) {
-	h := New(src(ok(0), ok(time.Second, act("a", model.StateRunning, 0, time.Second), act("b", model.StateRunning, 0, 2*time.Second))), "env")
+	h := New(src(ok(0), ok(time.Second, act("a", model.StateResuming, 0, time.Second), act("b", model.StateResuming, 0, 2*time.Second))), "env")
 	ch, cancel := h.Subscribe()
 	defer cancel()
 	h.Tick(context.Background())
@@ -234,5 +234,78 @@ func TestHubSetSourceResetsDiff(t *testing.T) {
 	}
 	if h.State().Env != "two" {
 		t.Fatalf("env %q", h.State().Env)
+	}
+}
+
+// The actor can suspend before the chat's stream end is recorded; the
+// suspend is held until MarkTurnEnded so its latency is still measured.
+func TestHubHoldsSuspendUntilTurnEnds(t *testing.T) {
+	h := New(src(
+		ok(0, act("a", model.StateSuspended, 1, 0)),
+		ok(11*time.Second, act("a", model.StateRunning, 1, 10*time.Second+130*time.Millisecond)),
+		ok(13*time.Second, act("a", model.StateSuspended, 2, 12*time.Second+45*time.Millisecond)),
+	), "env")
+	ch, cancel := h.Subscribe()
+	defer cancel()
+	h.MarkSent("s-a", t0.Add(10*time.Second))
+	h.Tick(context.Background())
+	h.Tick(context.Background())
+	h.Tick(context.Background())
+	for _, e := range events(drain(ch)) {
+		if e.Kind == model.EventSuspend {
+			t.Fatalf("suspend broadcast before turn end: %+v", e)
+		}
+	}
+	h.MarkTurnEnded("s-a", t0.Add(12*time.Second))
+	evs := events(drain(ch))
+	if len(evs) != 1 || evs[0].Kind != model.EventSuspend || evs[0].SuspendMS == nil || *evs[0].SuspendMS != 45 {
+		t.Fatalf("after turn end: %+v", evs)
+	}
+	if evs[0].Seq != 3 { // resume=1, running=2
+		t.Fatalf("seq %d", evs[0].Seq)
+	}
+	if h.State().Stats.Suspends != 1 {
+		t.Fatalf("stats %+v", h.State().Stats)
+	}
+}
+
+func TestHubHeldSuspendFlushesAfterTimeout(t *testing.T) {
+	now := t0
+	h := New(src(
+		ok(0, act("a", model.StateRunning, 1, 0)),
+		ok(time.Second, act("a", model.StateSuspended, 2, time.Second)),
+	), "env")
+	h.now = func() time.Time { return now }
+	ch, cancel := h.Subscribe()
+	defer cancel()
+	h.MarkSent("s-a", t0)
+	h.Tick(context.Background())
+	h.Tick(context.Background())
+	if evs := events(drain(ch)); len(evs) != 0 {
+		t.Fatalf("early: %+v", evs)
+	}
+	now = now.Add(1100 * time.Millisecond)
+	h.Tick(context.Background())
+	evs := events(drain(ch))
+	if len(evs) != 1 || evs[0].Kind != model.EventSuspend || evs[0].SuspendMS != nil {
+		t.Fatalf("after timeout: %+v", evs)
+	}
+}
+
+// The app's clock and the cluster's can differ by a few ms; a suspend stamped
+// just before the turn-end mark is still "at the turn end", not unknown.
+func TestHubSuspendSkewClampedToZero(t *testing.T) {
+	h := New(src(
+		ok(0, act("a", model.StateRunning, 1, 0)),
+		ok(time.Second, act("a", model.StateSuspended, 2, 996*time.Millisecond)),
+	), "env")
+	ch, cancel := h.Subscribe()
+	defer cancel()
+	h.Tick(context.Background())
+	h.MarkTurnEnded("s-a", t0.Add(time.Second)) // 4 ms after the suspend stamp
+	h.Tick(context.Background())
+	evs := events(drain(ch))
+	if len(evs) != 1 || evs[0].SuspendMS == nil || *evs[0].SuspendMS != 0 {
+		t.Fatalf("events %+v", evs)
 	}
 }

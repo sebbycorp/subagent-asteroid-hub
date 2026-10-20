@@ -43,6 +43,11 @@ func TestDiffFirstPollSeedsOnly(t *testing.T) {
 	assertKinds(t, evs)
 }
 
+func TestDiffCreateRunning(t *testing.T) {
+	evs := Diff(snap(), snap(actor("a", StateRunning, 0, "w1", time.Second)))
+	assertKinds(t, evs, EventCreate, EventRunning)
+}
+
 func TestDiffCreate(t *testing.T) {
 	evs := Diff(snap(), snap(actor("a", StateResuming, 0, "w1", time.Second)))
 	assertKinds(t, evs, EventCreate)
@@ -109,7 +114,7 @@ func TestDiffOrdering(t *testing.T) {
 	prev := snap()
 	cur := snap(actor("late", StateRunning, 0, "w1", 2*time.Second), actor("early", StateRunning, 0, "w2", time.Second))
 	evs := Diff(prev, cur)
-	if len(evs) != 2 || evs[0].ActorUID != "early" || evs[1].ActorUID != "late" {
+	if len(evs) != 4 || evs[0].ActorUID != "early" || evs[2].ActorUID != "late" {
 		t.Fatalf("order = %+v", evs)
 	}
 }
