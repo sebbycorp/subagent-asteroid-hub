@@ -3,7 +3,7 @@
 // each state message reconciles anything no event is about to change.
 import {
   newQueue, schedule, due, pending, nextSuspend, rockShape, aimAngle, wrapLines, settled,
-  newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating,
+  newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
 } from './show.mjs';
 import { setup, draw, saucerSpots, vaultSlot, FIELD } from './render.mjs';
 
@@ -24,6 +24,10 @@ const world = {
   idleCaption: 'WAITING FOR SUBSTRATE…',
   help: '',
   toast: null,
+  tour: null, // the guided tour's card (from the server)
+  tourLive: '',
+  focusUids: [],
+  splits: [],
 };
 const queue = newQueue();
 const captions = newCaptions();
@@ -108,7 +112,19 @@ function show(ev, now) {
   switch (ev.kind) {
     case 'create': {
       touch(uid);
+      const parent = forkParent(uid);
       world.vault.delete(uid);
+      if (parent) {
+        // the fork splits off its parent, like an asteroid breaking in two
+        const r = spawnRock(uid, { ...info, state: 'resuming' }, null);
+        r.x = parent.x; r.y = parent.y;
+        const a = Math.random() * Math.PI * 2;
+        r.vx = Math.cos(a) * 40; r.vy = Math.sin(a) * 40;
+        if (parent.rock) { parent.rock.vx = -r.vx; parent.rock.vy = -r.vy; }
+        r.sub = 'FORKED FROM CHECKPOINT';
+        world.splits.push({ x: parent.x, y: parent.y, born: now });
+        break;
+      }
       const r = spawnRock(uid, { ...info, state: 'resuming' }, saucerFor(ev.pool));
       r.sub = 'NEW SANDBOX';
       break;
@@ -168,6 +184,29 @@ function show(ev, now) {
       break;
     }
   }
+}
+
+// forkParent says where a forked actor splits off from: its parent's rock, or
+// the parent's capsule in the store.
+function forkParent(uid) {
+  const t = world.tour;
+  if (!t?.active || t.kind !== 'fork' || (t.focus || []).length < 2) return null;
+  const as = actors();
+  if (as[uid]?.sessionId !== t.focus[1]) return null;
+  const p = Object.values(as).find((a) => a.sessionId === t.focus[0]);
+  if (!p) return null;
+  const rock = world.rocks.get(p.uid);
+  if (rock) return { x: rock.x, y: rock.y, rock };
+  if (world.vault.has(p.uid)) return vaultSlot([...world.vault].indexOf(p.uid));
+  return null;
+}
+
+function updateTour() {
+  const t = world.state?.tour;
+  world.tour = t && t.active ? t : null;
+  const ids = new Set(world.tour?.focus || []);
+  world.focusUids = Object.values(actors()).filter((a) => ids.has(a.sessionId)).map((a) => a.uid);
+  world.tourLive = world.tour ? liveLine(world.tour, world.state) : '';
 }
 
 // ── state reconciliation ───────────────────────────────────────────────────
@@ -231,6 +270,7 @@ function connectStream() {
         ? 'CONNECTED. EVERY ROCK IS A LIVE SANDBOX · EVERY CAPSULE A SNAPSHOT IN STORAGE.'
         : 'WAITING FOR SUBSTRATE…';
       reconcile();
+      updateTour();
       updateHelp();
     } else if (msg.type === 'event') {
       schedule(queue, msg.event, performance.now());
@@ -257,7 +297,7 @@ async function post(path, body = {}) {
 function updateHelp() {
   const w = world.state?.waves || {};
   const flight = w.inFlight ? `  ·  ${w.inFlight} CHAT${w.inFlight === 1 ? '' : 'S'} IN FLIGHT` : '';
-  world.help = `T WAVE  ·  A AUTO WAVES ${w.auto ? 'ON' : 'OFF'}  ·  D DEMO AGENTS  ·  C CONNECT  ·  F FULLSCREEN${flight}`;
+  world.help = `N TOUR  ·  T WAVE  ·  A AUTO WAVES ${w.auto ? 'ON' : 'OFF'}  ·  D DEMO AGENTS  ·  C SETTINGS  ·  F FULLSCREEN${flight}`;
 }
 
 const overlay = document.getElementById('connect');
@@ -289,6 +329,11 @@ form.addEventListener('submit', async (e) => {
   }
 });
 document.getElementById('connect-cancel').addEventListener('click', () => { overlay.hidden = true; });
+document.getElementById('settings-btn').addEventListener('click', openConnect);
+document.getElementById('tour-btn').addEventListener('click', async () => {
+  const { ok, data } = await post('/api/tour', { action: world.tour ? 'next' : 'start' });
+  if (!ok) toast(data.error || 'tour failed');
+});
 
 window.addEventListener('keydown', async (e) => {
   if (!overlay.hidden) {
@@ -296,7 +341,12 @@ window.addEventListener('keydown', async (e) => {
     return;
   }
   const k = e.key.toLowerCase();
-  if (k === 't') {
+  if (k === 'n') {
+    const { ok, data } = await post('/api/tour', { action: world.tour ? 'next' : 'start' });
+    if (!ok) toast(data.error || 'tour failed');
+  } else if (k === 'escape' && world.tour) {
+    await post('/api/tour', { action: 'stop' });
+  } else if (k === 't') {
     const { ok, data } = await post('/api/wave');
     toast(ok ? `WAVE: ${data.sent} CHAT${data.sent === 1 ? '' : 'S'} SENT` : (data.error || 'wave failed'));
   } else if (k === 'a') {
@@ -335,6 +385,7 @@ function frame(now) {
   world.fragments = world.fragments.filter((f) => now - f.born < 1200);
   for (const f of world.fragments) { f.x += f.vx * dt; f.y += f.vy * dt; f.a += dt; }
   world.flashes = world.flashes.filter((f) => now - f.born < 600);
+  world.splits = world.splits.filter((sp) => now - sp.born < 700);
 
   world.bullets = world.bullets.filter((b) => {
     const k = (now - b.t0) / b.dur;

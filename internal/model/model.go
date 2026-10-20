@@ -70,7 +70,8 @@ type Event struct {
 	Agent     string    `json:"agent"`
 	Pool      string    `json:"pool"`
 	Worker    string    `json:"worker"`
-	RestoreMS *int64    `json:"restoreMs,omitempty"`
+	RestoreMS *int64    `json:"restoreMs,omitempty"` // suspended → running
+	StartMS   *int64    `json:"startMs,omitempty"`   // new session → running (cold start)
 	SuspendMS *int64    `json:"suspendMs,omitempty"`
 	Caption   string    `json:"caption"`
 }

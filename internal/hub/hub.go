@@ -68,6 +68,7 @@ type Hub struct {
 	turnEnded map[string]time.Time
 	chatting  map[string]bool // sent, turn not yet ended
 	held      map[string]heldSuspend
+	lastKind  map[string]model.EventKind // per actor UID
 	subs      map[chan []byte]struct{}
 	now       func() time.Time
 }
@@ -81,6 +82,7 @@ func New(src Source, env string) *Hub {
 		turnEnded: map[string]time.Time{},
 		chatting:  map[string]bool{},
 		held:      map[string]heldSuspend{},
+		lastKind:  map[string]model.EventKind{},
 		subs:      map[chan []byte]struct{}{},
 		now:       time.Now,
 	}
@@ -246,7 +248,9 @@ func (h *Hub) enrichLocked(e *model.Event, snap model.Snapshot) {
 	case model.EventRunning:
 		if at, ok := h.sent[session]; ok {
 			delete(h.sent, session)
-			if e.RestoreMS = msBetween(at, e.At); e.RestoreMS != nil {
+			if h.lastKind[e.ActorUID] == model.EventCreate {
+				e.StartMS = msBetween(at, e.At) // cold start, not a restore
+			} else if e.RestoreMS = msBetween(at, e.At); e.RestoreMS != nil {
 				st.LastRestoreMS = e.RestoreMS
 			}
 		}
@@ -258,6 +262,10 @@ func (h *Hub) enrichLocked(e *model.Event, snap model.Snapshot) {
 				st.LastSuspendMS = e.SuspendMS
 			}
 		}
+	}
+	h.lastKind[e.ActorUID] = e.Kind
+	if e.Kind == model.EventGone {
+		delete(h.lastKind, e.ActorUID)
 	}
 	e.Caption = model.Caption(*e)
 }

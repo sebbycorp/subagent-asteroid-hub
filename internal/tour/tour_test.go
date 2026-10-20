@@ -111,7 +111,7 @@ func (m *marks) MarkTurnEnded(id string, _ time.Time) {
 type rig struct {
 	t      *Tour
 	c      *fakeClient
-	w      *fakeWaves
+	w      Waver
 	m      *marks
 	active []bool
 }
@@ -163,7 +163,7 @@ func TestTourWalksAllChapters(t *testing.T) {
 	}
 
 	st = r.step(t, r.t.Next) // 5: density wave
-	if st.Chapter != 5 || r.w.n != 1 || !strings.Contains(st.Result, "3 CHATS") {
+	if st.Chapter != 5 || r.w.(*fakeWaves).n != 1 || !strings.Contains(st.Result, "3 CHATS") {
 		t.Fatalf("chapter 5: %+v", st)
 	}
 
@@ -237,3 +237,20 @@ func TestTourStop(t *testing.T) {
 		t.Fatalf("second stop fired OnActive: %v", r.active)
 	}
 }
+
+func TestTourDensitySingularChat(t *testing.T) {
+	r := newRig()
+	r.w = &oneWave{}
+	r.t = New(r.c, r.w, r.m, Options{})
+	r.step(t, r.t.Start)
+	for i := 0; i < 4; i++ {
+		r.step(t, r.t.Next)
+	}
+	if st := r.t.Status(); !strings.HasPrefix(st.Result, "1 CHAT SENT.") {
+		t.Fatalf("result %q", st.Result)
+	}
+}
+
+type oneWave struct{}
+
+func (oneWave) Wave(context.Context) (int, error) { return 1, nil }

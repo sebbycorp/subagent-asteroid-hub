@@ -27,6 +27,9 @@ func Caption(e Event) string {
 		if e.RestoreMS != nil {
 			s += fmt.Sprintf(". RESTORED IN %d MS", *e.RestoreMS)
 		}
+		if e.StartMS != nil {
+			s += fmt.Sprintf(". STARTED FROM THE GOLDEN SNAPSHOT IN %d MS", *e.StartMS)
+		}
 		s += "."
 	case EventSuspend:
 		s = fmt.Sprintf("TURN DONE. SUBSTRATE FROZE %s TO STORAGE", a)

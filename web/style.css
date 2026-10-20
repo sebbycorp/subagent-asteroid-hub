@@ -77,3 +77,27 @@ html, body {
 }
 
 #connect button:hover, #connect button:focus-visible { background: var(--ink); color: #000; outline: none; }
+
+#controls {
+  position: fixed;
+  right: 16px;
+  bottom: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+#controls button {
+  background: #000;
+  color: var(--dim);
+  border: 1px solid var(--dim);
+  padding: 6px 10px;
+  font: 11px var(--font);
+  letter-spacing: 2px;
+  cursor: pointer;
+}
+
+#controls button:hover, #controls button:focus-visible {
+  color: var(--ink);
+  border-color: var(--ink);
+  outline: none;
+}

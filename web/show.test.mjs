@@ -99,3 +99,20 @@ test('a newer event makes an older animation stale; busy counts overlap', async 
   assert.equal(endAnim(an, 'a', resumeTok), true);
   assert.equal(animating(an, 'a'), false);
 });
+
+test('liveLine describes the focused actor and density from state', async () => {
+  const { liveLine } = await import('./show.mjs');
+  const state = {
+    snapshot: {
+      pools: [{ name: 'p', workers: ['w1'] }],
+      actors: {
+        u1: { uid: 'u1', sessionId: 's1', state: 'suspended', snapshotGen: 3 },
+        u2: { uid: 'u2', sessionId: 's2', state: 'running', worker: 'kagent-default-abc-jxg28' },
+      },
+    },
+  };
+  assert.equal(liveLine({ kind: 'suspend', focus: ['s1'] }, state), 'LIVE: SUSPENDED · SNAPSHOT GEN 3 · 0 CPU');
+  assert.equal(liveLine({ kind: 'resume', focus: ['s2'] }, state), 'LIVE: RUNNING ON WORKER JXG28');
+  assert.equal(liveLine({ kind: 'density', focus: [] }, state), 'LIVE: 2 SESSIONS · 1 WORKER · 1 RUNNING NOW');
+  assert.equal(liveLine({ kind: 'create', focus: ['missing'] }, state), 'LIVE: WAITING FOR THE ACTOR…');
+});

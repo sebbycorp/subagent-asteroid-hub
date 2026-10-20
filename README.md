@@ -25,6 +25,24 @@ The top bar shows live numbers: busy workers, running and stored actors, the
 last restore time (chat sent → actor running), the last time-to-suspend, and
 the total number of suspends.
 
+## Guided tour
+
+Press `N` (or click **▶ TOUR**) for a five-chapter lesson. A card floats over
+the live show while each chapter does something real on the cluster:
+
+| Chapter | What happens on the cluster | What it teaches |
+|---------|-----------------------------|-----------------|
+| 1 · A new agent session | creates a session and tells it "the code word is ORION" | a session is a gVisor sandbox cloned from the agent's golden snapshot |
+| 2 · Suspend | nothing: the session has already frozen itself | memory + disk go to S3 the moment a turn ends; 0 CPU while idle |
+| 3 · Resume | asks "what was the code word?" | the snapshot is restored onto a worker in ~100 ms and the agent answers ORION: state survived |
+| 4 · Fork | checkpoints the session and forks a new one from it, then asks the fork | the asteroid splits in two, and the fork answers ORION too |
+| 5 · Density | sends a wave across every agent | sessions hold a worker only while thinking: many agents, few machines |
+
+Rocks the tour is talking about get bracket markers, and the card's last line
+is the live state of that actor. `N` steps forward, `Esc` ends the tour.
+Automatic waves pause while the tour runs. Tour sessions are named
+`asteroids-tour-…`.
+
 ## Quick start (local kind cluster)
 
 You need kagent 1.0 (tested with `v1.0.0-alpha16` and Substrate `0.6.0-alpha3`)
@@ -47,10 +65,11 @@ Without Docker, run `make dev`.
 
 | Key | Action |
 |-----|--------|
+| `N` | start the guided tour / next chapter (`Esc` ends it) |
 | `T` | send a wave of chats now |
 | `A` | toggle automatic waves |
 | `D` | create three small demo agents (only if the namespace has no ready agents) |
-| `C` | connect to another kagent environment |
+| `C` | settings: connect to another kagent environment (also the **⚙ SETTINGS** button) |
 | `F` | fullscreen |
 
 A Stream Deck or script can trigger a wave with

@@ -158,3 +158,20 @@ export function endAnim(an, uid, tok) {
 export function animating(an, uid) {
   return an.count.has(uid);
 }
+
+// liveLine is the tour card's last line: the real, current state of what the
+// chapter is about (its actor, or the whole cluster for density).
+export function liveLine(tour, state) {
+  const actors = Object.values(state?.snapshot?.actors || {});
+  if (tour.kind === 'density') {
+    const workers = (state?.snapshot?.pools || []).reduce((n, p) => n + (p.workers || []).length, 0);
+    const running = actors.filter((a) => a.state === 'running' || a.state === 'resuming').length;
+    return `LIVE: ${actors.length} SESSIONS · ${workers} WORKER${workers === 1 ? '' : 'S'} · ${running} RUNNING NOW`;
+  }
+  const id = (tour.focus || [])[tour.kind === 'fork' ? (tour.focus.length - 1) : 0];
+  const a = actors.find((x) => x.sessionId === id);
+  if (!a) return 'LIVE: WAITING FOR THE ACTOR…';
+  if (a.state === 'suspended') return `LIVE: SUSPENDED · SNAPSHOT GEN ${a.snapshotGen} · 0 CPU`;
+  if (a.state === 'running') return `LIVE: RUNNING ON WORKER ${(a.worker || '').split('-').pop().toUpperCase()}`;
+  return `LIVE: ${a.state.toUpperCase()}`;
+}

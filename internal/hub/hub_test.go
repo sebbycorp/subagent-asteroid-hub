@@ -325,3 +325,31 @@ func TestHubSetTourInState(t *testing.T) {
 		t.Fatalf("state json %s", b)
 	}
 }
+
+// A brand-new session's first run is a cold start from the golden snapshot,
+// not a restore: it is captioned and counted separately.
+func TestHubColdStartIsNotARestore(t *testing.T) {
+	h := New(src(
+		ok(0),
+		ok(time.Second, act("a", model.StateRunning, 0, 10*time.Second+300*time.Millisecond)),
+	), "env")
+	ch, cancel := h.Subscribe()
+	defer cancel()
+	h.MarkSent("s-a", t0.Add(10*time.Second))
+	h.Tick(context.Background())
+	h.Tick(context.Background())
+	evs := events(drain(ch))
+	if len(evs) != 2 || evs[1].Kind != model.EventRunning {
+		t.Fatalf("events %+v", evs)
+	}
+	run := evs[1]
+	if run.RestoreMS != nil || run.StartMS == nil || *run.StartMS != 300 {
+		t.Fatalf("running %+v", run)
+	}
+	if !strings.Contains(run.Caption, "STARTED FROM THE GOLDEN SNAPSHOT IN 300 MS") {
+		t.Fatalf("caption %q", run.Caption)
+	}
+	if h.State().Stats.LastRestoreMS != nil {
+		t.Fatalf("cold start counted as restore: %+v", h.State().Stats)
+	}
+}

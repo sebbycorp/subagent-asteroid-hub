@@ -206,10 +206,12 @@ export function draw(ctx, world, now) {
     stroke(ctx, RED, 2);
     ctx.globalAlpha = dim ? 0.35 : 1;
   }
+  drawFocus(ctx, world, now);
   drawShip(ctx, world.ship);
   drawCaption(ctx, world.captionLines, st.waves?.note, world.help);
   ctx.globalAlpha = 1;
 
+  if (world.tour?.active) drawTourCard(ctx, world.tour, world.tourLive, now);
   if (dim) {
     text(ctx, 'LINK LOST · RETRYING', W / 2, H / 2, { size: 28, align: 'center', spacing: 6 });
     if (st.error) text(ctx, st.error.slice(0, 110), W / 2, H / 2 + 30, { size: 11, align: 'center', color: DIM, spacing: 1 });
@@ -217,4 +219,68 @@ export function draw(ctx, world, now) {
   if (world.toast && now - world.toast.at < 2500) {
     text(ctx, world.toast.text, W / 2, 140, { size: 12, align: 'center' });
   }
+}
+
+// brackets marks something the tour is talking about.
+function brackets(ctx, x, y, r, now) {
+  const k = 4 + Math.sin(now / 180) * 2;
+  const R = r + k, L = 8;
+  ctx.beginPath();
+  for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    ctx.moveTo(x + sx * R, y + sy * (R - L));
+    ctx.lineTo(x + sx * R, y + sy * R);
+    ctx.lineTo(x + sx * (R - L), y + sy * R);
+  }
+  stroke(ctx, INK, 1.5);
+}
+
+function drawFocus(ctx, world, now) {
+  for (const uid of world.focusUids || []) {
+    const r = world.rocks.get(uid);
+    if (r) brackets(ctx, r.x, r.y, 28, now);
+    else if (world.vault.has(uid)) {
+      const s = vaultSlot([...world.vault].indexOf(uid));
+      brackets(ctx, s.x, s.y, 8, now);
+    }
+  }
+  for (const sp of world.splits || []) {
+    const k = (now - sp.born) / 700;
+    if (k > 1) continue;
+    ctx.globalAlpha = 1 - k;
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, 12 + k * 46, 0, Math.PI * 2);
+    stroke(ctx, INK, 1.2);
+    ctx.globalAlpha = 1;
+  }
+}
+
+export const CARD = { x: 30, y: 150, w: 540 };
+
+function drawTourCard(ctx, tour, live, now) {
+  const lines = [];
+  const body = tour.body || [];
+  const h = 64 + body.length * 16 + 22 * 4;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.86)';
+  ctx.fillRect(CARD.x, CARD.y, CARD.w, h);
+  ctx.beginPath();
+  ctx.rect(CARD.x, CARD.y, CARD.w, h);
+  stroke(ctx, INK, 1.5);
+  ctx.restore();
+  let y = CARD.y + 26;
+  const x = CARD.x + 18;
+  text(ctx, `TOUR ${tour.chapter}/${tour.total} · ${tour.title}`, x, y, { size: 13, spacing: 2 });
+  y += 26;
+  for (const l of body) { text(ctx, l, x, y, { size: 10, spacing: 1, color: DIM }); y += 16; }
+  y += 10;
+  if (tour.doing) {
+    const dot = Math.floor(now / 400) % 2 ? '▸' : ' ';
+    text(ctx, `${dot} ${tour.doing}`, x, y, { size: 11, spacing: 1 });
+    y += 22;
+  }
+  if (tour.result) { text(ctx, tour.result, x, y, { size: 11, spacing: 1 }); y += 22; }
+  if (tour.error) { text(ctx, tour.error.slice(0, 80), x, y, { size: 11, spacing: 1, color: RED }); y += 22; }
+  if (live) { text(ctx, live, x, y, { size: 10, spacing: 1, color: DIM }); y += 22; }
+  text(ctx, tour.busy ? 'WORKING ON THE CLUSTER…' : tour.chapter >= tour.total ? 'N FINISH · ESC END TOUR' : 'N NEXT CHAPTER · ESC END TOUR',
+    CARD.x + CARD.w - 18, CARD.y + h - 12, { size: 9, align: 'right', color: DIM });
 }
