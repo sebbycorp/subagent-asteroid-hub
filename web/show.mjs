@@ -99,3 +99,62 @@ export function settled(seen, uid, mismatch, nowMs) {
   if (!seen.has(uid)) seen.set(uid, nowMs);
   return nowMs - seen.get(uid) >= GRACE_MS;
 }
+
+// Captions get their own queue: each stays up at least CAPTION_MS so it can
+// be read, even when animations run faster. If a burst backs up more than
+// MAX_WAITING, "running" captions go first (the rock's label already says
+// it), then creates/resumes; suspend captions — the point of the show — stay.
+export const CAPTION_MS = 2400;
+export const MAX_WAITING = 3;
+
+export function newCaptions() {
+  return { current: null, since: -Infinity, waiting: [] };
+}
+
+export function pushCaption(cq, ev, nowMs) {
+  if (cq.current === null) {
+    cq.current = ev.caption;
+    cq.since = nowMs;
+    return;
+  }
+  cq.waiting.push(ev);
+  while (cq.waiting.length > MAX_WAITING) {
+    let i = cq.waiting.findIndex((e) => e.kind === 'running');
+    if (i < 0) i = cq.waiting.findIndex((e) => e.kind !== 'suspend');
+    cq.waiting.splice(i < 0 ? 0 : i, 1);
+  }
+}
+
+export function currentCaption(cq, nowMs) {
+  if (cq.waiting.length && nowMs - cq.since >= CAPTION_MS) {
+    cq.current = cq.waiting.shift().caption;
+    cq.since = nowMs;
+  }
+  return cq.current;
+}
+
+// Per-actor animation bookkeeping. beginAnim returns a token; endAnim reports
+// whether that token is still the actor's latest, so an animation overtaken
+// by a newer event for the same actor (e.g. a suspend capsule still landing
+// when the resume starts) doesn't apply its stale result.
+export function newAnims() {
+  return { latest: new Map(), count: new Map(), next: 1 };
+}
+
+export function beginAnim(an, uid) {
+  const tok = an.next++;
+  an.latest.set(uid, tok);
+  an.count.set(uid, (an.count.get(uid) || 0) + 1);
+  return tok;
+}
+
+export function endAnim(an, uid, tok) {
+  const n = (an.count.get(uid) || 1) - 1;
+  if (n > 0) an.count.set(uid, n);
+  else an.count.delete(uid);
+  return an.latest.get(uid) === tok;
+}
+
+export function animating(an, uid) {
+  return an.count.has(uid);
+}

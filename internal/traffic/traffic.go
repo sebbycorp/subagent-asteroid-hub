@@ -44,6 +44,9 @@ type Options struct {
 var (
 	ErrWaveRunning = errors.New("a wave is still running")
 	ErrNoAgents    = errors.New("no ready agents")
+	// ErrSessionGone is returned (wrapped) by Client.Chat when the session no
+	// longer exists, e.g. someone deleted it.
+	ErrSessionGone = errors.New("session no longer exists")
 )
 
 const (
@@ -240,14 +243,16 @@ func (g *Generator) prepareAndStart(ctx context.Context, c Client, adopted bool)
 	}
 	k := min(g.o.AgentsPerWave, len(agents))
 	var targets []string
+	picked := map[string]bool{}
 	for i := 0; i < k; i++ {
 		g.mu.Lock()
 		a := agents[(g.rot+i)%len(agents)]
 		g.mu.Unlock()
-		id, err := g.pickSession(ctx, c, a)
+		id, err := g.pickSession(ctx, c, a, picked)
 		if err != nil {
 			return 0, err
 		}
+		picked[id] = true
 		targets = append(targets, id)
 	}
 	g.mu.Lock()
@@ -267,8 +272,9 @@ func (g *Generator) prepareAndStart(ctx context.Context, c Client, adopted bool)
 }
 
 // pickSession returns the session to chat on for agent a: a new one while the
-// agent has fewer than 2, otherwise the least recently used.
-func (g *Generator) pickSession(ctx context.Context, c Client, a AgentRef) (string, error) {
+// agent has fewer than 2, otherwise the least recently used. Sessions already
+// picked this wave are never deleted to make room.
+func (g *Generator) pickSession(ctx context.Context, c Client, a AgentRef, picked map[string]bool) (string, error) {
 	g.mu.Lock()
 	var mine []*session
 	for _, s := range g.sessions {
@@ -293,11 +299,13 @@ func (g *Generator) pickSession(ctx context.Context, c Client, a AgentRef) (stri
 	var oldest *session
 	if len(g.sessions) >= g.o.MaxSessions {
 		for _, s := range g.sessions {
-			if oldest == nil || s.born < oldest.born {
+			if !picked[s.info.ID] && (oldest == nil || s.born < oldest.born) {
 				oldest = s
 			}
 		}
-		delete(g.sessions, oldest.info.ID)
+		if oldest != nil {
+			delete(g.sessions, oldest.info.ID)
+		}
 	}
 	g.mu.Unlock()
 
@@ -320,10 +328,20 @@ func (g *Generator) pickSession(ctx context.Context, c Client, a AgentRef) (stri
 func (g *Generator) chat(ctx context.Context, c Client, id, text string) {
 	defer g.wg.Done()
 	g.m.MarkSent(id, g.o.Now())
-	c.Chat(ctx, id, text) // a failed chat still ends the turn; the screen shows what Substrate did
+	err := c.Chat(ctx, id, text)
 	g.m.MarkTurnEnded(id, g.o.Now())
 	g.mu.Lock()
 	g.inFlight--
+	if errors.Is(err, ErrSessionGone) {
+		delete(g.sessions, id) // next wave starts a fresh one
+	}
+	if err != nil {
+		msg := strings.ToUpper(err.Error())
+		if len(msg) > 90 {
+			msg = msg[:90] + "…"
+		}
+		g.note = "CHATS FAILING: " + msg
+	}
 	g.mu.Unlock()
 	g.status()
 }

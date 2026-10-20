@@ -60,3 +60,42 @@ test('settled only after a mismatch lasts GRACE_MS', async () => {
   assert.equal(seen.has('a'), false, 'agreement clears the timer');
   assert.equal(settled(seen, 'a', true, 5000), false, 'a new mismatch starts over');
 });
+
+test('captions hold CAPTION_MS each and queue in order', async () => {
+  const { newCaptions, pushCaption, currentCaption, CAPTION_MS } = await import('./show.mjs');
+  const cq = newCaptions();
+  pushCaption(cq, { kind: 'resume', caption: 'A' }, 0);
+  pushCaption(cq, { kind: 'suspend', caption: 'B' }, 100);
+  assert.equal(currentCaption(cq, 100), 'A');
+  assert.equal(currentCaption(cq, CAPTION_MS - 1), 'A');
+  assert.equal(currentCaption(cq, CAPTION_MS), 'B');
+  assert.equal(currentCaption(cq, 10 * CAPTION_MS), 'B', 'last caption stays up');
+});
+
+test('caption backlog drops running captions first, never suspends', async () => {
+  const { newCaptions, pushCaption, currentCaption, CAPTION_MS, MAX_WAITING } = await import('./show.mjs');
+  const cq = newCaptions();
+  pushCaption(cq, { kind: 'resume', caption: 'r1' }, 0);
+  const kinds = ['running', 'suspend', 'resume', 'running', 'suspend', 'resume', 'running', 'suspend'];
+  kinds.forEach((k, i) => pushCaption(cq, { kind: k, caption: `${k}${i}` }, 0));
+  assert.ok(cq.waiting.length <= MAX_WAITING, `waiting ${cq.waiting.length}`);
+  const shown = [];
+  for (let t = 0; t < 20 * CAPTION_MS; t += CAPTION_MS) {
+    const c = currentCaption(cq, t);
+    if (shown[shown.length - 1] !== c) shown.push(c);
+  }
+  for (const s of ['suspend1', 'suspend4', 'suspend7']) assert.ok(shown.includes(s), `${s} missing from ${shown}`);
+  assert.ok(!shown.includes('running0'), 'oldest running caption should be dropped first');
+});
+
+test('a newer event makes an older animation stale; busy counts overlap', async () => {
+  const { newAnims, beginAnim, endAnim, animating } = await import('./show.mjs');
+  const an = newAnims();
+  const suspendTok = beginAnim(an, 'a'); // suspend capsule still flying…
+  const resumeTok = beginAnim(an, 'a'); // …when the same actor's resume starts
+  assert.equal(animating(an, 'a'), true);
+  assert.equal(endAnim(an, 'a', suspendTok), false, 'stale suspend must not touch the vault');
+  assert.equal(animating(an, 'a'), true, 'resume still in flight');
+  assert.equal(endAnim(an, 'a', resumeTok), true);
+  assert.equal(animating(an, 'a'), false);
+});

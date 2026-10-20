@@ -14,6 +14,8 @@ import (
 	"github.com/kagent-dev/kagent/go/api/client"
 	apiv1 "github.com/kagent-dev/kagent/go/api/gen/kagent/api/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/model"
@@ -298,15 +300,27 @@ func (c *Client) Chat(ctx context.Context, sessionID, text string) error {
 	defer cancel()
 	a2a, err := c.gw.A2A.ForSession(cctx, sessionID)
 	if err != nil {
-		return fmt.Errorf("a2a client: %w", err)
+		return sessionErr("a2a client", err)
 	}
 	msg := a2atype.NewMessage(a2atype.MessageRoleUser, a2atype.NewTextPart(text))
 	for _, err := range a2a.SendStreamingMessage(cctx, &a2atype.SendMessageRequest{Message: msg}) {
 		if err != nil {
-			return fmt.Errorf("a2a stream: %w", err)
+			return sessionErr("a2a stream", err)
 		}
 	}
 	return nil
+}
+
+// sessionErr wraps a chat error, marking a missing session as
+// traffic.ErrSessionGone so the generator stops using it.
+func sessionErr(op string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if status.Code(err) == codes.NotFound {
+		return fmt.Errorf("%s: %w: %w", op, traffic.ErrSessionGone, err)
+	}
+	return fmt.Errorf("%s: %w", op, err)
 }
 
 // ListHarnesses lists Harness names in the namespace, ready ones first.

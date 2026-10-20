@@ -22,6 +22,7 @@ type fakeClient struct {
 	chatGate  chan struct{} // if set, Chat blocks until closed
 	listGate  chan struct{} // if set, ListReadyAgents blocks until closed
 	listing   chan struct{} // if set, signalled when ListReadyAgents is entered
+	chatErr   map[string]error // per session ID
 	n         int
 }
 
@@ -63,7 +64,7 @@ func (f *fakeClient) Chat(_ context.Context, id, _ string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.chats = append(f.chats, id)
-	return nil
+	return f.chatErr[id]
 }
 func (f *fakeClient) ListHarnesses(context.Context) ([]string, error) { return f.harnesses, nil }
 func (f *fakeClient) CreateAgent(_ context.Context, a AgentRef, harness, model, prompt string) error {
@@ -266,4 +267,58 @@ func TestWaveRejectsWhilePreparing(t *testing.T) {
 		t.Fatal(err)
 	}
 	g.wg.Wait()
+}
+
+func TestWaveCapNeverDeletesSessionPickedThisWave(t *testing.T) {
+	a := agents("a", "b", "c", "d", "e", "f", "g")
+	c := &fakeClient{agents: a}
+	// agent a owns 2 (the oldest); b..g own 1 each: 8 owned, cap 8
+	c.sessions = append(c.sessions,
+		SessionInfo{ID: "a1", Name: "asteroids-a-1", Agent: a[0], CreatedAt: time.Unix(1, 0)},
+		SessionInfo{ID: "a2", Name: "asteroids-a-2", Agent: a[0], CreatedAt: time.Unix(2, 0)})
+	for i, ag := range a[1:] {
+		c.sessions = append(c.sessions, SessionInfo{ID: "x" + ag.Name, Name: "asteroids-" + ag.Name, Agent: ag, CreatedAt: time.Unix(int64(10+i), 0)})
+	}
+	g := New(c, newMarker(), Options{AgentsPerWave: 7, MaxSessions: 8})
+	wave(t, g)
+	chatted := map[string]bool{}
+	for _, id := range c.chats {
+		chatted[id] = true
+	}
+	for _, id := range c.deleted {
+		if chatted[id] {
+			t.Fatalf("deleted %s, which this wave chatted on (deleted %v, chats %v)", id, c.deleted, c.chats)
+		}
+	}
+}
+
+func TestChatFailureShowsNote(t *testing.T) {
+	c := &fakeClient{agents: agents("hello"), chatErr: map[string]error{"id-1": errors.New("rpc error: code = Unavailable")}}
+	var mu sync.Mutex
+	var notes []string
+	g := New(c, newMarker(), Options{OnStatus: func(_ bool, _ int, note string) {
+		mu.Lock()
+		notes = append(notes, note)
+		mu.Unlock()
+	}})
+	wave(t, g)
+	mu.Lock()
+	defer mu.Unlock()
+	last := notes[len(notes)-1]
+	if !strings.HasPrefix(last, "CHATS FAILING: ") || !strings.Contains(last, "UNAVAILABLE") {
+		t.Fatalf("note %q (all %q)", last, notes)
+	}
+}
+
+func TestChatOnGoneSessionForgetsIt(t *testing.T) {
+	c := &fakeClient{agents: agents("hello"), chatErr: map[string]error{"id-1": fmt.Errorf("a2a client: %w", ErrSessionGone)}}
+	g := New(c, newMarker(), Options{})
+	wave(t, g)
+	if g.owned() != 0 {
+		t.Fatalf("gone session still owned (%d)", g.owned())
+	}
+	wave(t, g)
+	if len(c.created) != 2 {
+		t.Fatalf("expected a fresh session after the gone one, created %v", c.created)
+	}
 }

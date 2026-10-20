@@ -1,7 +1,10 @@
 // Wires the live event stream to the stage. The backend owns the truth:
 // rocks, capsules and explosions only start from real, displayed events, and
 // each state message reconciles anything no event is about to change.
-import { newQueue, schedule, due, pending, nextSuspend, rockShape, aimAngle, wrapLines, settled } from './show.mjs';
+import {
+  newQueue, schedule, due, pending, nextSuspend, rockShape, aimAngle, wrapLines, settled,
+  newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating,
+} from './show.mjs';
 import { setup, draw, saucerSpots, vaultSlot, FIELD } from './render.mjs';
 
 const ACTIVE = new Set(['resuming', 'running', 'suspending']);
@@ -16,13 +19,15 @@ const world = {
   bullets: [],
   capsules: [],
   flashes: [],
-  busy: new Set(), // uids with an animation in progress
   ship: { x: 500, y: 470, a: -Math.PI / 2, flash: 0 },
-  captionLines: ['WAITING FOR SUBSTRATE…'],
+  captionLines: [],
+  idleCaption: 'WAITING FOR SUBSTRATE…',
   help: '',
   toast: null,
 };
 const queue = newQueue();
+const captions = newCaptions();
+const anims = newAnims(); // per-actor animation tokens
 window.__show = { world, queue }; // for debugging in the browser console
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -90,31 +95,39 @@ function explode(r, now) {
 
 // ── events (already paced by the queue) ────────────────────────────────────
 
+// touch marks an instant event as the actor's latest, making any animation
+// still running for an older event stale.
+function touch(uid) {
+  endAnim(anims, uid, beginAnim(anims, uid));
+}
+
 function show(ev, now) {
-  world.captionLines = wrapLines(ev.caption, 96);
+  pushCaption(captions, ev, now);
   const info = { ...actors()[ev.actorUid], agent: ev.agent, worker: ev.worker };
   const uid = ev.actorUid;
   switch (ev.kind) {
     case 'create': {
+      touch(uid);
       world.vault.delete(uid);
       const r = spawnRock(uid, { ...info, state: 'resuming' }, saucerFor(ev.pool));
       r.sub = 'NEW SANDBOX';
       break;
     }
     case 'resume': {
-      if (world.rocks.has(uid)) break;
+      if (world.rocks.has(uid)) { touch(uid); break; }
       const from = world.vault.has(uid) ? vaultSlot([...world.vault].indexOf(uid)) : vaultPos();
       world.vault.delete(uid);
-      world.busy.add(uid);
+      const tok = beginAnim(anims, uid);
       const s = saucerFor(ev.pool);
       fly(from, s, 650, () => {
-        world.busy.delete(uid);
+        if (!endAnim(anims, uid, tok)) return;
         const r = spawnRock(uid, { ...info, state: 'resuming' }, s);
         r.sub = 'RESUMING';
       });
       break;
     }
     case 'running': {
+      touch(uid);
       const r = world.rocks.get(uid) || spawnRock(uid, info, saucerFor(ev.pool));
       r.worker = ev.worker;
       r.sub = subLabel({ ...info, state: 'running' });
@@ -122,9 +135,10 @@ function show(ev, now) {
     }
     case 'suspend': {
       const r = world.rocks.get(uid);
-      world.busy.add(uid);
+      const tok = beginAnim(anims, uid);
+      const store = () => { if (endAnim(anims, uid, tok)) world.vault.add(uid); };
       if (!r) {
-        fly(saucerFor(ev.pool), vaultPos(), 800, () => { world.vault.add(uid); world.busy.delete(uid); });
+        fly(saucerFor(ev.pool), vaultPos(), 800, store);
         break;
       }
       r.dying = true;
@@ -134,11 +148,12 @@ function show(ev, now) {
       world.bullets.push({ x: sx, y: sy, from: { x: sx, y: sy }, target: r, t0: now, dur: 220, hit: () => {
         explode(r, performance.now());
         world.rocks.delete(uid);
-        fly({ x: r.x, y: r.y }, vaultPos(), 900, () => { world.vault.add(uid); world.busy.delete(uid); });
+        fly({ x: r.x, y: r.y }, vaultPos(), 900, store);
       } });
       break;
     }
     case 'fail': {
+      touch(uid);
       const r = world.rocks.get(uid);
       if (r) {
         r.failed = true;
@@ -147,6 +162,7 @@ function show(ev, now) {
       break;
     }
     case 'gone': {
+      touch(uid);
       world.rocks.delete(uid);
       world.vault.delete(uid);
       break;
@@ -167,7 +183,7 @@ function reconcile() {
   const now = performance.now();
   const uids = new Set([...Object.keys(as), ...world.rocks.keys(), ...world.vault]);
   for (const uid of uids) {
-    if (pending(queue, uid) || world.busy.has(uid)) {
+    if (pending(queue, uid) || animating(anims, uid)) {
       mismatchSince.delete(uid);
       continue;
     }
@@ -177,6 +193,7 @@ function reconcile() {
     if (want === 'keep') continue;
     if (want === have) {
       settled(mismatchSince, uid, false, now);
+      if (want === 'rock') world.vault.delete(uid); // never both at once
       if (want === 'rock') {
         const r = world.rocks.get(uid);
         if (!r.dying) { r.agent = a.agent; r.worker = a.worker; r.sub = subLabel(a); }
@@ -210,9 +227,9 @@ function connectStream() {
     const msg = JSON.parse(m.data);
     if (msg.type === 'state') {
       world.state = msg.state;
-      if (world.captionLines[0] === 'WAITING FOR SUBSTRATE…' && msg.state.connected) {
-        world.captionLines = ['CONNECTED. EVERY ROCK IS A LIVE SANDBOX · EVERY CAPSULE A SNAPSHOT IN STORAGE.'];
-      }
+      world.idleCaption = msg.state.connected
+        ? 'CONNECTED. EVERY ROCK IS A LIVE SANDBOX · EVERY CAPSULE A SNAPSHOT IN STORAGE.'
+        : 'WAITING FOR SUBSTRATE…';
       reconcile();
       updateHelp();
     } else if (msg.type === 'event') {
@@ -303,6 +320,7 @@ function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
   for (const ev of due(queue, now)) show(ev, now);
+  world.captionLines = wrapLines(currentCaption(captions, now) ?? world.idleCaption, 96);
 
   for (const r of world.rocks.values()) {
     r.x += r.vx * dt;

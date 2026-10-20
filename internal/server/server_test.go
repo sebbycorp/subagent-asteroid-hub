@@ -240,3 +240,18 @@ func TestServerConfigIgnoresCAFileFromRequest(t *testing.T) {
 		t.Fatalf("%d %s %+v", resp.StatusCode, body, r.connect)
 	}
 }
+
+func TestServerConfigKeepsTokenForSameAPI(t *testing.T) {
+	r := newRig(t, nil)
+	post(t, r.srv.URL+"/api/config", `{"api":"http://a:8083","namespace":"other"}`)
+	post(t, r.srv.URL+"/api/config", `{"api":"http://b:8083"}`)
+	if len(r.connect) != 2 {
+		t.Fatalf("connects %+v", r.connect)
+	}
+	if r.connect[0].Token != "secret" {
+		t.Fatalf("same API lost its token: %+v", r.connect[0])
+	}
+	if r.connect[1].Token != "" {
+		t.Fatalf("token leaked to a different API: %+v", r.connect[1])
+	}
+}

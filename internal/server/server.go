@@ -174,6 +174,9 @@ func (s *server) setConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	c.CAFile = s.conn.CAFile // a file path is container config, never request input
+	if c.Token == "" && c.API == s.conn.API {
+		c.Token = s.conn.Token // the form never sees the token; keep it for the same endpoint
+	}
 	if c.Namespace == "" {
 		c.Namespace = s.conn.Namespace
 	}
