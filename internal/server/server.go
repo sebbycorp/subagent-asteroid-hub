@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"mime"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -54,14 +56,34 @@ func New(h Streamer, w Waves, connect Connector, assets fs.FS, initial ConnInfo)
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(assets))
 	mux.HandleFunc("GET /events", s.events)
-	mux.HandleFunc("POST /api/wave", s.wave)
-	mux.HandleFunc("GET /traffic", s.wave)
-	mux.HandleFunc("POST /api/auto", s.auto)
-	mux.HandleFunc("POST /api/demo-agents", s.demo)
+	mux.HandleFunc("POST /api/wave", sameOriginJSON(s.wave))
+	mux.HandleFunc("POST /traffic", sameOriginJSON(s.wave)) // Stream Deck friendly alias
+	mux.HandleFunc("POST /api/auto", sameOriginJSON(s.auto))
+	mux.HandleFunc("POST /api/demo-agents", sameOriginJSON(s.demo))
 	mux.HandleFunc("GET /api/config", s.getConfig)
-	mux.HandleFunc("POST /api/config", s.setConfig)
+	mux.HandleFunc("POST /api/config", sameOriginJSON(s.setConfig))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 	return mux
+}
+
+// sameOriginJSON guards state-changing calls against cross-site requests from
+// other pages in the viewer's browser: the body must be declared JSON (a
+// cross-origin page cannot send that without a preflight this server never
+// answers) and any Origin header must match this host.
+func sameOriginJSON(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mt != "application/json" {
+			writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "content-type must be application/json"})
+			return
+		}
+		if o := r.Header.Get("Origin"); o != "" {
+			if u, err := url.Parse(o); err != nil || u.Host != r.Host {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "cross-origin request refused"})
+				return
+			}
+		}
+		next(w, r)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -151,6 +173,7 @@ func (s *server) setConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
+	c.CAFile = s.conn.CAFile // a file path is container config, never request input
 	if c.Namespace == "" {
 		c.Namespace = s.conn.Namespace
 	}

@@ -93,10 +93,6 @@ func TestServerWave202(t *testing.T) {
 	if resp.StatusCode != http.StatusAccepted || !strings.Contains(body, `"sent":3`) {
 		t.Fatalf("%d %s", resp.StatusCode, body)
 	}
-	resp2, err := http.Get(r.srv.URL + "/traffic")
-	if err != nil || resp2.StatusCode != http.StatusAccepted {
-		t.Fatalf("GET /traffic: %v %v", err, resp2.StatusCode)
-	}
 }
 
 func TestServerWaveConflict409(t *testing.T) {
@@ -188,5 +184,59 @@ func TestServerConfigReconnectCallsConnector(t *testing.T) {
 	resp, body = post(t, r.srv.URL+"/api/config", `{"api":"bad"}`)
 	if resp.StatusCode != 400 || !strings.Contains(body, "dial failed") {
 		t.Fatalf("%d %s", resp.StatusCode, body)
+	}
+}
+
+func do(t *testing.T, method, url, contentType, origin, body string) int {
+	t.Helper()
+	req, _ := http.NewRequest(method, url, strings.NewReader(body))
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	if origin != "" {
+		req.Header.Set("Origin", origin)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	return resp.StatusCode
+}
+
+func TestServerRejectsCrossOrigin(t *testing.T) {
+	r := newRig(t, nil)
+	if code := do(t, "POST", r.srv.URL+"/api/wave", "application/json", "http://evil.example", ""); code != http.StatusForbidden {
+		t.Fatalf("cross-origin wave: %d", code)
+	}
+	if code := do(t, "POST", r.srv.URL+"/api/wave", "application/json", r.srv.URL, ""); code != http.StatusAccepted {
+		t.Fatalf("same-origin wave: %d", code)
+	}
+}
+
+func TestServerRequiresJSONForMutations(t *testing.T) {
+	r := newRig(t, nil)
+	for _, path := range []string{"/api/wave", "/traffic", "/api/auto", "/api/demo-agents", "/api/config"} {
+		if code := do(t, "POST", r.srv.URL+path, "text/plain", "", "{}"); code != http.StatusUnsupportedMediaType {
+			t.Errorf("%s text/plain: %d", path, code)
+		}
+	}
+}
+
+func TestServerTrafficIsPostOnly(t *testing.T) {
+	r := newRig(t, nil)
+	if code := do(t, "GET", r.srv.URL+"/traffic", "", "", ""); code == http.StatusAccepted {
+		t.Fatalf("GET /traffic: %d", code)
+	}
+	if code := do(t, "POST", r.srv.URL+"/traffic", "application/json", "", ""); code != http.StatusAccepted {
+		t.Fatalf("POST /traffic: %d", code)
+	}
+}
+
+func TestServerConfigIgnoresCAFileFromRequest(t *testing.T) {
+	r := newRig(t, nil)
+	resp, body := post(t, r.srv.URL+"/api/config", `{"api":"http://b:8083","caFile":"/etc/passwd"}`)
+	if resp.StatusCode != 200 || len(r.connect) != 1 || r.connect[0].CAFile != "" {
+		t.Fatalf("%d %s %+v", resp.StatusCode, body, r.connect)
 	}
 }
