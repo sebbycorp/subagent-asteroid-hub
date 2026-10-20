@@ -1,0 +1,118 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DELAY_MS, GAP_MS, newQueue, schedule, due, rockShape, aimAngle } from './show.mjs';
+
+test('schedule delays first event by DELAY_MS', () => {
+  const q = newQueue();
+  assert.equal(schedule(q, { seq: 1 }, 1000), 1000 + DELAY_MS);
+  assert.deepEqual(due(q, 1000 + DELAY_MS - 1), []);
+  assert.deepEqual(due(q, 1000 + DELAY_MS).map((e) => e.seq), [1]);
+});
+
+test('schedule spaces bursts', () => {
+  const q = newQueue();
+  const at = [1, 2, 3, 4].map((seq) => schedule(q, { seq }, 0));
+  assert.deepEqual(at, [600, 1500, 2400, 3300]);
+  assert.equal(GAP_MS, 900);
+  assert.deepEqual(due(q, 600).map((e) => e.seq), [1]);
+  assert.deepEqual(due(q, 1499).map((e) => e.seq), []);
+  assert.deepEqual(due(q, 1500).map((e) => e.seq), [2]);
+  assert.deepEqual(due(q, 5000).map((e) => e.seq), [3, 4]);
+});
+
+test('schedule keeps seq order when events arrive out of order', () => {
+  const q = newQueue();
+  schedule(q, { seq: 5 }, 0);
+  schedule(q, { seq: 4 }, 0);
+  assert.deepEqual(due(q, 10000).map((e) => e.seq), [4, 5]);
+});
+
+test('schedule after a quiet spell is not penalised by an old gap', () => {
+  const q = newQueue();
+  schedule(q, { seq: 1 }, 0);
+  due(q, 600);
+  assert.equal(schedule(q, { seq: 2 }, 60000), 60000 + DELAY_MS);
+});
+
+test('rockShape deterministic and bounded', () => {
+  const a = rockShape('cbcec519-0f94');
+  assert.deepEqual(a, rockShape('cbcec519-0f94'));
+  assert.notDeepEqual(a, rockShape('d6221e2d-aceb'));
+  assert.ok(a.length >= 8 && a.length <= 11, `points ${a.length}`);
+  for (const [x, y] of a) {
+    const r = Math.hypot(x, y);
+    assert.ok(r >= 18 * 0.7 - 1e-9 && r <= 28 + 1e-9, `radius ${r}`);
+  }
+});
+
+test('aimAngle points at target', () => {
+  assert.ok(Math.abs(aimAngle({ x: 0, y: 0 }, { x: 0, y: 10 }) - Math.PI / 2) < 1e-9);
+  assert.ok(Math.abs(aimAngle({ x: 0, y: 0 }, { x: -5, y: 0 }) - Math.PI) < 1e-9);
+});
+
+test('settled only after a mismatch lasts GRACE_MS', async () => {
+  const { settled, GRACE_MS } = await import('./show.mjs');
+  const seen = new Map();
+  assert.equal(settled(seen, 'a', true, 0), false);
+  assert.equal(settled(seen, 'a', true, GRACE_MS - 1), false);
+  assert.equal(settled(seen, 'a', true, GRACE_MS), true);
+  assert.equal(settled(seen, 'a', false, GRACE_MS + 10), false);
+  assert.equal(seen.has('a'), false, 'agreement clears the timer');
+  assert.equal(settled(seen, 'a', true, 5000), false, 'a new mismatch starts over');
+});
+
+test('captions hold CAPTION_MS each and queue in order', async () => {
+  const { newCaptions, pushCaption, currentCaption, CAPTION_MS } = await import('./show.mjs');
+  const cq = newCaptions();
+  pushCaption(cq, { kind: 'resume', caption: 'A' }, 0);
+  pushCaption(cq, { kind: 'suspend', caption: 'B' }, 100);
+  assert.equal(currentCaption(cq, 100), 'A');
+  assert.equal(currentCaption(cq, CAPTION_MS - 1), 'A');
+  assert.equal(currentCaption(cq, CAPTION_MS), 'B');
+  assert.equal(currentCaption(cq, 10 * CAPTION_MS), 'B', 'last caption stays up');
+});
+
+test('caption backlog drops running captions first, never suspends', async () => {
+  const { newCaptions, pushCaption, currentCaption, CAPTION_MS, MAX_WAITING } = await import('./show.mjs');
+  const cq = newCaptions();
+  pushCaption(cq, { kind: 'resume', caption: 'r1' }, 0);
+  const kinds = ['running', 'suspend', 'resume', 'running', 'suspend', 'resume', 'running', 'suspend'];
+  kinds.forEach((k, i) => pushCaption(cq, { kind: k, caption: `${k}${i}` }, 0));
+  assert.ok(cq.waiting.length <= MAX_WAITING, `waiting ${cq.waiting.length}`);
+  const shown = [];
+  for (let t = 0; t < 20 * CAPTION_MS; t += CAPTION_MS) {
+    const c = currentCaption(cq, t);
+    if (shown[shown.length - 1] !== c) shown.push(c);
+  }
+  for (const s of ['suspend1', 'suspend4', 'suspend7']) assert.ok(shown.includes(s), `${s} missing from ${shown}`);
+  assert.ok(!shown.includes('running0'), 'oldest running caption should be dropped first');
+});
+
+test('a newer event makes an older animation stale; busy counts overlap', async () => {
+  const { newAnims, beginAnim, endAnim, animating } = await import('./show.mjs');
+  const an = newAnims();
+  const suspendTok = beginAnim(an, 'a'); // suspend capsule still flying…
+  const resumeTok = beginAnim(an, 'a'); // …when the same actor's resume starts
+  assert.equal(animating(an, 'a'), true);
+  assert.equal(endAnim(an, 'a', suspendTok), false, 'stale suspend must not touch the vault');
+  assert.equal(animating(an, 'a'), true, 'resume still in flight');
+  assert.equal(endAnim(an, 'a', resumeTok), true);
+  assert.equal(animating(an, 'a'), false);
+});
+
+test('liveLine describes the focused actor and density from state', async () => {
+  const { liveLine } = await import('./show.mjs');
+  const state = {
+    snapshot: {
+      pools: [{ name: 'p', workers: ['w1'] }],
+      actors: {
+        u1: { uid: 'u1', sessionId: 's1', state: 'suspended', snapshotGen: 3 },
+        u2: { uid: 'u2', sessionId: 's2', state: 'running', worker: 'kagent-default-abc-jxg28' },
+      },
+    },
+  };
+  assert.equal(liveLine({ kind: 'suspend', focus: ['s1'] }, state), 'LIVE: SUSPENDED · SNAPSHOT GEN 3 · 0 CPU');
+  assert.equal(liveLine({ kind: 'resume', focus: ['s2'] }, state), 'LIVE: RUNNING ON WORKER JXG28');
+  assert.equal(liveLine({ kind: 'density', focus: [] }, state), 'LIVE: 2 SESSIONS · 1 WORKER · 1 RUNNING NOW');
+  assert.equal(liveLine({ kind: 'create', focus: ['missing'] }, state), 'LIVE: WAITING FOR THE ACTOR…');
+});
