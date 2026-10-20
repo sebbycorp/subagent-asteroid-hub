@@ -284,3 +284,9 @@ function drawTourCard(ctx, tour, live, now) {
   text(ctx, tour.busy ? 'WORKING ON THE CLUSTER…' : tour.chapter >= tour.total ? 'N FINISH · ESC END TOUR' : 'N NEXT CHAPTER · ESC END TOUR',
     CARD.x + CARD.w - 18, CARD.y + h - 12, { size: 9, align: 'right', color: DIM });
 }
+
+// activeField is where rocks may fly: while the tour card is open the field
+// steps aside so the card never hides the action.
+export function activeField(tourOpen) {
+  return tourOpen ? { ...FIELD, x0: CARD.x + CARD.w + 30 } : FIELD;
+}

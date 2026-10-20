@@ -5,7 +5,7 @@ import {
   newQueue, schedule, due, pending, nextSuspend, rockShape, aimAngle, wrapLines, settled,
   newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
 } from './show.mjs';
-import { setup, draw, saucerSpots, vaultSlot, FIELD } from './render.mjs';
+import { setup, draw, saucerSpots, vaultSlot, activeField } from './render.mjs';
 
 const ACTIVE = new Set(['resuming', 'running', 'suspending']);
 const canvas = document.getElementById('stage');
@@ -58,10 +58,11 @@ function subLabel(a) {
 function spawnRock(uid, info, from) {
   const angle = Math.PI / 2 + (Math.random() - 0.5) * 1.6;
   const speed = 22 + Math.random() * 22;
+  const F = activeField(!!world.tour);
   const r = {
     uid,
-    x: from ? from.x : FIELD.x0 + Math.random() * (FIELD.x1 - FIELD.x0),
-    y: from ? from.y + 30 : FIELD.y0 + Math.random() * (FIELD.y1 - FIELD.y0),
+    x: from ? from.x : F.x0 + Math.random() * (F.x1 - F.x0),
+    y: from ? from.y + 30 : F.y0 + Math.random() * (F.y1 - F.y0),
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
     rot: 0,
@@ -372,15 +373,24 @@ function frame(now) {
   for (const ev of due(queue, now)) show(ev, now);
   world.captionLines = wrapLines(currentCaption(captions, now) ?? world.idleCaption, 96);
 
+  const F = activeField(!!world.tour);
   for (const r of world.rocks.values()) {
     r.x += r.vx * dt;
     r.y += r.vy * dt;
     r.rot += r.spin * dt;
-    const w = FIELD.x1 - FIELD.x0, h = FIELD.y1 - FIELD.y0;
-    if (r.x < FIELD.x0) r.x += w;
-    if (r.x > FIELD.x1) r.x -= w;
-    if (r.y < FIELD.y0) r.y += h;
-    if (r.y > FIELD.y1) r.y -= h;
+    const w = F.x1 - F.x0, h = F.y1 - F.y0;
+    if (r.x < F.x0) {
+      if (world.tour) {
+        // the card owns this area: glide out of it and bounce off its edge
+        r.x += Math.min(F.x0 - r.x, Math.max(120 * dt, (F.x0 - r.x) * 4 * dt));
+        r.vx = Math.abs(r.vx);
+      } else {
+        r.x += w;
+      }
+    }
+    if (r.x > F.x1) r.x -= w;
+    if (r.y < F.y0) r.y += h;
+    if (r.y > F.y1) r.y -= h;
   }
   world.fragments = world.fragments.filter((f) => now - f.born < 1200);
   for (const f of world.fragments) { f.x += f.vx * dt; f.y += f.vy * dt; f.a += dt; }

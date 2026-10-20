@@ -6,6 +6,12 @@ narrate. Every rock, shot and capsule is a real actor or a real state change in
 a real cluster, read from the kagent 1.0 API. The app also sends real chats to
 your agents in waves, so there is always something happening.
 
+![A wave of real chats: four agents launch from the worker pool, run, and are frozen into the snapshot store](docs/media/show.gif)
+
+*A wave of real chats on a local kind cluster: four agents launch from the
+worker pool's saucer, run on its one worker, and are frozen into the snapshot
+store the instant each turn ends.*
+
 ## What you're looking at
 
 | On screen | In Agent Substrate |
@@ -37,6 +43,8 @@ the live show while each chapter does something real on the cluster:
 | 3 · Resume | asks "what was the code word?" | the snapshot is restored onto a worker in ~100 ms and the agent answers ORION: state survived |
 | 4 · Fork | checkpoints the session and forks a new one from it, then asks the fork | the asteroid splits in two, and the fork answers ORION too |
 | 5 · Density | sends a wave across every agent | sessions hold a worker only while thinking: many agents, few machines |
+
+![The guided tour: create, suspend, resume (the agent still knows ORION), and fork](docs/media/tour.gif)
 
 Rocks the tour is talking about get bracket markers, and the card's last line
 is the live state of that actor. `N` steps forward, `Esc` ends the tour.
