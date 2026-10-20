@@ -19,9 +19,9 @@ type fakeClient struct {
 	deleted   []string // session IDs
 	chats     []string // session IDs
 	newAgents []string
-	chatGate  chan struct{} // if set, Chat blocks until closed
-	listGate  chan struct{} // if set, ListReadyAgents blocks until closed
-	listing   chan struct{} // if set, signalled when ListReadyAgents is entered
+	chatGate  chan struct{}    // if set, Chat blocks until closed
+	listGate  chan struct{}    // if set, ListReadyAgents blocks until closed
+	listing   chan struct{}    // if set, signalled when ListReadyAgents is entered
 	chatErr   map[string]error // per session ID
 	n         int
 }

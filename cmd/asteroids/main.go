@@ -17,6 +17,7 @@ import (
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/hub"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/kagent"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/server"
+	"github.com/sebbycorp/subagent-asteroid-hub/internal/tour"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/traffic"
 	"github.com/sebbycorp/subagent-asteroid-hub/web"
 )
@@ -45,6 +46,21 @@ func main() {
 	})
 	gen.SetAuto(cfg.AutoWaves)
 
+	// Auto waves pause while the tour runs so each chapter's action is clear.
+	var autoBefore bool
+	guide := tour.New(client, gen, h, tour.Options{
+		OnChange: func(s tour.Status) { h.SetTour(s) },
+		OnActive: func(on bool) {
+			if on {
+				autoBefore = gen.Auto()
+				gen.SetAuto(false)
+			} else {
+				gen.SetAuto(autoBefore)
+			}
+		},
+	})
+	h.SetTour(guide.Status())
+
 	var mu sync.Mutex
 	connect := func(c server.ConnInfo) error {
 		next, err := dial(c)
@@ -57,6 +73,7 @@ func main() {
 		mu.Unlock()
 		h.SetSource(next, next.Env())
 		gen.SetClient(next)
+		guide.SetClient(next)
 		prev.Close()
 		log.Printf("switched to %s", next.Env())
 		return nil
@@ -73,7 +90,7 @@ func main() {
 	go h.Run(ctx, 250*time.Millisecond)
 	go gen.Run(ctx)
 
-	srv := &http.Server{Addr: cfg.Listen, Handler: server.New(h, gen, connect, web.Files, conn)}
+	srv := &http.Server{Addr: cfg.Listen, Handler: server.New(h, gen, guide, connect, web.Files, conn)}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)

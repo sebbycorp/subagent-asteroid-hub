@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -45,11 +46,12 @@ func (f *fakeWaves) EnsureDemoAgents(context.Context) ([]string, error) {
 type rig struct {
 	srv     *httptest.Server
 	waves   *fakeWaves
+	tour    *fakeTour
 	connect []ConnInfo
 }
 
 func newRig(t *testing.T, waveErr error) *rig {
-	r := &rig{waves: &fakeWaves{waveErr: waveErr, demo: []string{"asteroids-demo-scout"}}}
+	r := &rig{waves: &fakeWaves{waveErr: waveErr, demo: []string{"asteroids-demo-scout"}}, tour: &fakeTour{}}
 	h := hub.New(emptySource{}, "env")
 	connector := func(c ConnInfo) error {
 		if c.API == "bad" {
@@ -59,7 +61,7 @@ func newRig(t *testing.T, waveErr error) *rig {
 		return nil
 	}
 	assets := fstest.MapFS{"index.html": {Data: []byte("<title>show</title>")}}
-	r.srv = httptest.NewServer(New(h, r.waves, connector, assets, ConnInfo{API: "http://a:8083", UserID: "admin@kagent.dev", Token: "secret", Namespace: "kagent"}))
+	r.srv = httptest.NewServer(New(h, r.waves, r.tour, connector, assets, ConnInfo{API: "http://a:8083", UserID: "admin@kagent.dev", Token: "secret", Namespace: "kagent"}))
 	t.Cleanup(r.srv.Close)
 	return r
 }
@@ -268,5 +270,33 @@ func TestServerConfigDropsTokenWhenGatewayChanges(t *testing.T) {
 	}
 	if r.connect[1].Token != "" {
 		t.Fatalf("token restored after it was dropped: %+v", r.connect[1])
+	}
+}
+
+type fakeTour struct {
+	calls []string
+	err   error
+}
+
+func (f *fakeTour) Start(context.Context) error { f.calls = append(f.calls, "start"); return f.err }
+func (f *fakeTour) Next(context.Context) error  { f.calls = append(f.calls, "next"); return f.err }
+func (f *fakeTour) Stop()                       { f.calls = append(f.calls, "stop") }
+
+func TestServerTourActions(t *testing.T) {
+	r := newRig(t, nil)
+	for _, a := range []string{"start", "next", "stop"} {
+		if resp, body := post(t, r.srv.URL+"/api/tour", `{"action":"`+a+`"}`); resp.StatusCode != 200 {
+			t.Fatalf("%s: %d %s", a, resp.StatusCode, body)
+		}
+	}
+	if fmt.Sprint(r.tour.calls) != "[start next stop]" {
+		t.Fatalf("calls %v", r.tour.calls)
+	}
+	if resp, _ := post(t, r.srv.URL+"/api/tour", `{"action":"dance"}`); resp.StatusCode != 400 {
+		t.Fatalf("bad action: %d", resp.StatusCode)
+	}
+	r.tour.err = errors.New("the tour is still running this chapter")
+	if resp, body := post(t, r.srv.URL+"/api/tour", `{"action":"next"}`); resp.StatusCode != 409 || !strings.Contains(body, "still running") {
+		t.Fatalf("busy: %d %s", resp.StatusCode, body)
 	}
 }

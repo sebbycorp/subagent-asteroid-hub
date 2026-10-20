@@ -309,3 +309,19 @@ func TestHubSuspendSkewClampedToZero(t *testing.T) {
 		t.Fatalf("events %+v", evs)
 	}
 }
+
+func TestHubSetTourInState(t *testing.T) {
+	h := New(src(ok(0)), "env")
+	ch, cancel := h.Subscribe()
+	defer cancel()
+	drain(ch)
+	h.SetTour(map[string]any{"active": true, "chapter": 2})
+	ms := drain(ch)
+	if len(ms) != 1 || ms[0].Type != "state" {
+		t.Fatalf("messages %+v", ms)
+	}
+	b, _ := json.Marshal(h.State())
+	if !strings.Contains(string(b), `"tour":{"active":true,"chapter":2}`) {
+		t.Fatalf("state json %s", b)
+	}
+}

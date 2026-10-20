@@ -29,6 +29,13 @@ type Waves interface {
 	EnsureDemoAgents(ctx context.Context) ([]string, error)
 }
 
+// Tour is the guided tour's control side.
+type Tour interface {
+	Start(ctx context.Context) error
+	Next(ctx context.Context) error
+	Stop()
+}
+
 // ConnInfo describes a kagent environment.
 type ConnInfo struct {
 	API       string `json:"api"`
@@ -45,14 +52,15 @@ type Connector func(ConnInfo) error
 type server struct {
 	hub     Streamer
 	waves   Waves
+	tour    Tour
 	connect Connector
 	mu      sync.Mutex
 	conn    ConnInfo
 }
 
 // New builds the HTTP handler.
-func New(h Streamer, w Waves, connect Connector, assets fs.FS, initial ConnInfo) http.Handler {
-	s := &server{hub: h, waves: w, connect: connect, conn: initial}
+func New(h Streamer, w Waves, t Tour, connect Connector, assets fs.FS, initial ConnInfo) http.Handler {
+	s := &server{hub: h, waves: w, tour: t, connect: connect, conn: initial}
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(assets))
 	mux.HandleFunc("GET /events", s.events)
@@ -60,6 +68,7 @@ func New(h Streamer, w Waves, connect Connector, assets fs.FS, initial ConnInfo)
 	mux.HandleFunc("POST /traffic", sameOriginJSON(s.wave)) // Stream Deck friendly alias
 	mux.HandleFunc("POST /api/auto", sameOriginJSON(s.auto))
 	mux.HandleFunc("POST /api/demo-agents", sameOriginJSON(s.demo))
+	mux.HandleFunc("POST /api/tour", sameOriginJSON(s.tourAction))
 	mux.HandleFunc("GET /api/config", s.getConfig)
 	mux.HandleFunc("POST /api/config", sameOriginJSON(s.setConfig))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
@@ -156,6 +165,34 @@ func (s *server) demo(w http.ResponseWriter, r *http.Request) {
 		names = []string{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"created": names})
+}
+
+func (s *server) tourAction(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Action string `json:"action"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	ctx := context.WithoutCancel(r.Context())
+	var err error
+	switch body.Action {
+	case "start":
+		err = s.tour.Start(ctx)
+	case "next":
+		err = s.tour.Next(ctx)
+	case "stop":
+		s.tour.Stop()
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action must be start, next or stop"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"ok": body.Action})
 }
 
 func (s *server) getConfig(w http.ResponseWriter, _ *http.Request) {

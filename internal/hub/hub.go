@@ -42,6 +42,7 @@ type State struct {
 	Snapshot  model.Snapshot `json:"snapshot"`
 	Stats     Stats          `json:"stats"`
 	Waves     WaveStatus     `json:"waves"`
+	Tour      any            `json:"tour,omitempty"` // the guided tour's card, when set
 }
 
 const subBuffer = 256
@@ -89,7 +90,7 @@ func New(src Source, env string) *Hub {
 func (h *Hub) SetSource(src Source, env string) {
 	h.mu.Lock()
 	h.src, h.prev = src, model.Snapshot{}
-	h.state = State{Env: env, Snapshot: model.Snapshot{Actors: map[string]model.Actor{}}, Waves: h.state.Waves}
+	h.state = State{Env: env, Snapshot: model.Snapshot{Actors: map[string]model.Actor{}}, Waves: h.state.Waves, Tour: h.state.Tour}
 	h.sent, h.turnEnded = map[string]time.Time{}, map[string]time.Time{}
 	h.chatting, h.held = map[string]bool{}, map[string]heldSuspend{}
 	h.mu.Unlock()
@@ -121,6 +122,14 @@ func (h *Hub) SetWaves(w WaveStatus) {
 	h.state.Waves = w
 	msg := h.stateMsgLocked()
 	h.broadcastLocked(msg)
+	h.mu.Unlock()
+}
+
+// SetTour updates the guided-tour card shown on screen.
+func (h *Hub) SetTour(t any) {
+	h.mu.Lock()
+	h.state.Tour = t
+	h.broadcastLocked(h.stateMsgLocked())
 	h.mu.Unlock()
 }
 
