@@ -1,1 +1,29 @@
-<!doctype html><title>Substrate Asteroids</title>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Substrate Asteroids</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='black'/%3E%3Cpath d='M16 4 26 27 16 21 6 27Z' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="stage" aria-label="Live view of Agent Substrate actors as vector asteroids"></canvas>
+  <div id="connect" hidden>
+    <form id="connect-form" autocomplete="off">
+      <h1>CONNECT TO KAGENT</h1>
+      <label>API URL <input name="api" placeholder="http://host.docker.internal:8083" required></label>
+      <label>A2A GATEWAY <input name="gateway" placeholder="(same as API)"></label>
+      <label>USER ID <input name="userId" placeholder="admin@kagent.dev"></label>
+      <label>NAMESPACE <input name="namespace" placeholder="kagent"></label>
+      <label>BEARER TOKEN <input name="token" type="password" placeholder="(optional)"></label>
+      <p id="connect-error" role="alert"></p>
+      <div class="row">
+        <button type="submit">CONNECT</button>
+        <button type="button" id="connect-cancel">CANCEL</button>
+      </div>
+    </form>
+  </div>
+  <script type="module" src="main.mjs"></script>
+</body>
+</html>

@@ -196,16 +196,17 @@ func (h *Hub) sessionLocked(uid string, snap model.Snapshot) string {
 }
 
 // releaseLocked numbers, measures and captions events, then broadcasts the
-// state followed by the events.
+// events followed by the state, so a browser reconciling on the state
+// already has those events queued.
 func (h *Hub) releaseLocked(evs []model.Event, snap model.Snapshot) {
 	for i := range evs {
 		h.enrichLocked(&evs[i], snap)
 	}
-	h.broadcastLocked(h.stateMsgLocked())
 	for _, e := range evs {
 		b, _ := json.Marshal(map[string]any{"type": "event", "event": e})
 		h.broadcastLocked(b)
 	}
+	h.broadcastLocked(h.stateMsgLocked())
 }
 
 // skewMS is how far the cluster's clock may trail the app's; readings

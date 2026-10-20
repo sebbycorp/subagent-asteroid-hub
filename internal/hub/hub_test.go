@@ -111,10 +111,10 @@ func TestHubEmitsCaptionedEventsWithSeq(t *testing.T) {
 	if !strings.HasPrefix(evs[0].Caption, "NEW SESSION FOR HELLO-SUBSTRATE") {
 		t.Fatalf("caption %q", evs[0].Caption)
 	}
-	// the state for a tick goes out before its events
-	last := ms[len(ms)-3]
-	if last.Type != "state" {
-		t.Fatalf("expected state before events, got %+v", ms)
+	// a tick's events go out before its state, so a browser reconciling on
+	// the state already has the events queued and doesn't pre-empt them
+	if ms[len(ms)-3].Type != "event" || ms[len(ms)-2].Type != "event" || ms[len(ms)-1].Type != "state" {
+		t.Fatalf("expected events then state, got %+v", ms)
 	}
 }
 
