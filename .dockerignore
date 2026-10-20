@@ -1,0 +1,6 @@
+.git
+.superpowers
+.playwright-mcp
+bin
+docs
+*.md
