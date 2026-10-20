@@ -368,8 +368,12 @@ func (t *Tour) runDensity(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	chats := "CHATS"
+	if n == 1 {
+		chats = "CHAT"
+	}
 	t.update(func(s *Status) {
-		s.Result = fmt.Sprintf("%d CHATS SENT. WATCH THE WORKERS STAY BUSY ONLY WHILE AGENTS THINK.", n)
+		s.Result = fmt.Sprintf("%d %s SENT. WATCH THE WORKERS STAY BUSY ONLY WHILE AGENTS THINK.", n, chats)
 	})
 	return nil
 }
