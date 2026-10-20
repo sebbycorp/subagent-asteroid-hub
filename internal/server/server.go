@@ -174,8 +174,10 @@ func (s *server) setConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	c.CAFile = s.conn.CAFile // a file path is container config, never request input
-	if c.Token == "" && c.API == s.conn.API {
-		c.Token = s.conn.Token // the form never sees the token; keep it for the same endpoint
+	// The form never sees the token; keep it only if every endpoint it is
+	// sent to (API and A2A gateway) is unchanged.
+	if c.Token == "" && c.API == s.conn.API && gateway(c) == gateway(s.conn) {
+		c.Token = s.conn.Token
 	}
 	if c.Namespace == "" {
 		c.Namespace = s.conn.Namespace
@@ -193,4 +195,12 @@ func (s *server) setConfig(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	c.Token = ""
 	writeJSON(w, http.StatusOK, c)
+}
+
+// gateway is where A2A traffic (and the token) goes: the API unless set.
+func gateway(c ConnInfo) string {
+	if c.Gateway != "" {
+		return c.Gateway
+	}
+	return c.API
 }

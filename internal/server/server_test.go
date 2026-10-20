@@ -255,3 +255,18 @@ func TestServerConfigKeepsTokenForSameAPI(t *testing.T) {
 		t.Fatalf("token leaked to a different API: %+v", r.connect[1])
 	}
 }
+
+func TestServerConfigDropsTokenWhenGatewayChanges(t *testing.T) {
+	r := newRig(t, nil)
+	post(t, r.srv.URL+"/api/config", `{"api":"http://a:8083","gateway":"http://evil:8083"}`)
+	post(t, r.srv.URL+"/api/config", `{"api":"http://a:8083","gateway":"http://a:8083"}`) // same as API: unchanged
+	if len(r.connect) != 2 {
+		t.Fatalf("connects %+v", r.connect)
+	}
+	if r.connect[0].Token != "" {
+		t.Fatalf("token sent to a new gateway: %+v", r.connect[0])
+	}
+	if r.connect[1].Token != "" {
+		t.Fatalf("token restored after it was dropped: %+v", r.connect[1])
+	}
+}
