@@ -94,3 +94,16 @@ test('the fighter glows, but its glow never leaks into the rest of the scene', a
   assert.ok(glowed, 'the fighter has a neon glow');
   assert.ok(calls.filter((c) => c === 'stroke').length >= 8, 'a detailed hull, not a sketch');
 });
+
+test('the mothership faces the way it is flying', async () => {
+  const { saucerSpots } = await import('./render.mjs');
+  const pools = [{ name: 'a', workers: [] }, { name: 'b', workers: [] }];
+  for (let t = 0; t < 60000; t += 1700) {
+    const now = saucerSpots(pools, t), next = saucerSpots(pools, t + 50);
+    now.forEach((s, i) => {
+      assert.ok(s.face >= -1 && s.face <= 1, `face ${s.face}`);
+      const dx = next[i].x - s.x;
+      if (Math.abs(dx) > 0.5) assert.equal(Math.sign(s.face), Math.sign(dx), `pool ${i} at ${t} faces backwards`);
+    });
+  }
+});
