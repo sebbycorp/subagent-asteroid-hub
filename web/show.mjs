@@ -256,3 +256,28 @@ export function fxLabel(ev) {
   if (ev.kind === 'tool') return `${String(ev.target ? `${ev.target}/${ev.tool}` : ev.tool).toUpperCase()} · ${d}`;
   return `${String(ev.model || ev.target).toUpperCase()} · ${d}${ev.tokens ? ` · ${ev.tokens} TOK` : ''}`;
 }
+
+// streamDots returns the progress (0..1) of each dot in a constant stream:
+// one dot emitted every gapMs between start and end, each taking travelMs to
+// arrive. Oldest (furthest along) first.
+export function streamDots(tMs, start, end, gapMs, travelMs) {
+  const out = [];
+  const last = Math.min(end, tMs);
+  for (let e = start + Math.floor((last - start) / gapMs) * gapMs; e >= start; e -= gapMs) {
+    const k = Math.round(((tMs - e) / travelMs) * 1e9) / 1e9;
+    if (k >= 1) break;
+    if (k >= 0) out.push(k);
+  }
+  return out.reverse();
+}
+
+// llmTiming turns a model call agentgateway handled into a real-time replay:
+// the request streams until the first token, the answer streams after it,
+// denser when the model produced more tokens.
+export function llmTiming(ev) {
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const total = clamp(ev.durationMs || 0, 900, 8000);
+  const ttft = Math.round(clamp(ev.ttftMs ?? total * 0.6, 150, total - 200));
+  const respGap = clamp((total - ttft) / Math.max(4, (ev.outputTokens || 0) / 2), 30, 150);
+  return { total, ttft, reqGap: 70, respGap, travel: 600 };
+}

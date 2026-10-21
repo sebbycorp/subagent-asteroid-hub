@@ -181,3 +181,24 @@ test('call labels say what crossed the gateway', async () => {
   assert.equal(fxLabel({ kind: 'tool', tool: 'search_issues', target: 'github', durationMs: 310 }), 'GITHUB/SEARCH_ISSUES · 310MS');
   assert.equal(fxLabel({ kind: 'chat', durationMs: 2700 }), 'A2A CHAT IN · 2.7S');
 });
+
+test('streamDots: a constant stream emitted over a window, each dot travelling once', async () => {
+  const { streamDots } = await import('./show.mjs');
+  // dots every 100ms between 0 and 1000ms, each takes 500ms to arrive
+  assert.deepEqual(streamDots(-1, 0, 1000, 100, 500), []);
+  assert.deepEqual(streamDots(250, 0, 1000, 100, 500), [0.5, 0.3, 0.1]);
+  assert.equal(streamDots(800, 0, 1000, 100, 500).length, 5, 'steady stream mid-call');
+  assert.deepEqual(streamDots(1600, 0, 1000, 100, 500), [], 'all arrived after the window');
+});
+
+test('llmTiming replays a model call with its real request and response phases', async () => {
+  const { llmTiming } = await import('./show.mjs');
+  const t = llmTiming({ durationMs: 1775, ttftMs: 1739, outputTokens: 37 });
+  assert.equal(t.total, 1775);
+  assert.equal(t.ttft, 1575, 'first token clamped so the answer stream is visible');
+  const u = llmTiming({ durationMs: 3000, ttftMs: 800, outputTokens: 200 });
+  assert.equal(u.ttft, 800);
+  assert.ok(u.respGap < llmTiming({ durationMs: 3000, ttftMs: 800, outputTokens: 10 }).respGap, 'more tokens, denser stream');
+  assert.equal(llmTiming({ durationMs: 50 }).total, 900, 'very fast calls still visible');
+  assert.equal(llmTiming({ durationMs: 50 }).ttft, 540, 'no ttft: assume 60% thinking');
+});

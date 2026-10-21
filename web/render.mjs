@@ -1,5 +1,7 @@
 // Vector drawing for the 1280×720 stage. Everything is white strokes on black.
 
+import { streamDots } from './show.mjs';
+
 export const W = 1280;
 export const H = 720;
 export const FIELD = { x0: 20, x1: 990, y0: 150, y1: 610 };
@@ -454,7 +456,7 @@ function drawGatewayPlanet(ctx, world, now) {
   ctx.ellipse(x, y, PLANET_R * 1.5, PLANET_R * 0.3, -0.32, 0.12 * Math.PI, 0.88 * Math.PI, true);
   stroke(ctx, INK, 1.4);
   if (LOGO.complete && LOGO.naturalWidth) {
-    const size = PLANET_R * 2.5; // the mark fills about half its square artboard
+    const size = PLANET_R * 1.3; // small mark at the planet's core
     ctx.drawImage(LOGO, x - size / 2, y - size / 2, size, size);
   }
   text(ctx, seen ? 'AGENTGATEWAY' : 'AGENTGATEWAY · NO CALLS YET', x, y - SHIELD_R - 12, { size: 11, align: 'center', spacing: 3, color: GW });
@@ -548,20 +550,13 @@ function drawGatewayFx(ctx, world, now) {
     stroke(ctx, GW, 1);
     ctx.setLineDash([]);
     ctx.globalAlpha = base * fade;
-    if (fx.kind === 'llm') {
-      if (k < 0.45) {
-        for (let i = 0; i < 5; i++) {
-          const t = k / 0.45 - i * 0.06;
-          if (t > 0 && t < 1) dotAt(ctx, along(pts, t), 2.6, GW);
-        }
-      }
-      if (k > 0.4 && k < 0.7) { ctx.save(); planetRing(ctx, p, (k - 0.4) / 0.3); ctx.restore(); }
-      if (k > 0.55) {
-        for (let i = 0; i < 9; i++) {
-          const t = (k - 0.55) / 0.45 - i * 0.045;
-          if (t > 0 && t < 1) dotAt(ctx, along(back, t), 1.8, INK);
-        }
-      }
+    if (fx.kind === 'llm' && fx.timing) {
+      // a constant stream, replayed with the call's real timing: the request
+      // flows in until the first token, then the answer streams back
+      const tm = fx.timing, t = now - fx.born;
+      for (const d of streamDots(t, 0, tm.ttft, tm.reqGap, tm.travel)) dotAt(ctx, along(pts, d), 2.4, GW);
+      if (t < tm.ttft) { ctx.save(); planetRing(ctx, p, ((t / 700) % 1)); ctx.restore(); } // thinking
+      for (const d of streamDots(t, tm.ttft, tm.total, tm.respGap, tm.travel)) dotAt(ctx, along(back, d), 1.8, INK);
     } else if (fx.kind === 'tool') {
       if (k < 0.35 && Math.floor(now / 60) % 3 !== 0) lightning(ctx, pts);
       if (k > 0.3 && k < 0.55) { ctx.save(); planetRing(ctx, p, (k - 0.3) / 0.25); ctx.restore(); }

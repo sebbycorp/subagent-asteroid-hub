@@ -4,7 +4,7 @@
 import {
   newQueue, schedule, due, pending, nextSuspend, rockShape, aimAngle, wrapLines, settled,
   newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
-  logLine, portFor, attribute, growScale, fxDuration, fxLabel, DELAY_MS,
+  logLine, portFor, attribute, growScale, fxDuration, fxLabel, llmTiming, DELAY_MS,
 } from './show.mjs';
 import { setup, draw, saucerSpots, vaultSlot, activeField, gatewayPos, NEW, RESUMED, GW } from './render.mjs';
 
@@ -263,8 +263,10 @@ function showGateway(ev, now) {
   const to = ev.kind === 'chat' ? saucerFor((pools()[0] || {}).name) : null;
   // labels for the same planet stack instead of overlapping
   const slot = world.gwFx.length % 6;
+  const timing = ev.kind === 'llm' ? llmTiming(ev) : null;
   world.gwFx.push({
-    rock, port: port.key, kind: ev.kind, label: fxLabel(ev), slot, born: now, dur: fxDuration(ev.durationMs),
+    rock, port: port.key, kind: ev.kind, label: fxLabel(ev), slot, born: now, timing,
+    dur: timing ? timing.total + timing.travel + 150 : fxDuration(ev.durationMs),
     ingress: ev.direction === 'ingress', to: to && { x: to.x, y: to.y + 20 },
   });
   world.shipFlash = now;

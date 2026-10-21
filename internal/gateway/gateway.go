@@ -5,6 +5,7 @@ package gateway
 
 import (
 	"io"
+	"math"
 	"mime"
 	"net/http"
 	"strconv"
@@ -29,6 +30,11 @@ type Event struct {
 	Status     int       `json:"status"`
 	DurationMS int64     `json:"durationMs"`
 	Tokens     int64     `json:"tokens,omitempty"`
+	// Model calls: the token split and time to first token, so the show can
+	// replay the request and the streamed response with their real timing.
+	InputTokens  int64 `json:"inputTokens,omitempty"`
+	OutputTokens int64 `json:"outputTokens,omitempty"`
+	TTFTMS       int64 `json:"ttftMs,omitempty"`
 }
 
 // AgentAttribute is the access-log attribute carrying the calling agent
@@ -44,6 +50,8 @@ func attrs(kvs []*commonpb.KeyValue) map[string]string {
 			m[kv.GetKey()] = v.GetStringValue()
 		case v.GetIntValue() != 0:
 			m[kv.GetKey()] = strconv.FormatInt(v.GetIntValue(), 10)
+		case v.GetDoubleValue() != 0:
+			m[kv.GetKey()] = strconv.FormatFloat(v.GetDoubleValue(), 'f', -1, 64)
 		}
 	}
 	return m
@@ -75,7 +83,12 @@ func FromLogs(req *collogs.ExportLogsServiceRequest, now time.Time) []Event {
 				case a["protocol"] == "llm":
 					e.Kind, e.Direction = "llm", "egress"
 					e.Model = a["gen_ai.request.model"]
-					e.Tokens = atoi(a["gen_ai.usage.input_tokens"]) + atoi(a["gen_ai.usage.output_tokens"])
+					e.InputTokens = atoi(a["gen_ai.usage.input_tokens"])
+					e.OutputTokens = atoi(a["gen_ai.usage.output_tokens"])
+					e.Tokens = e.InputTokens + e.OutputTokens
+					if f, err := strconv.ParseFloat(a["agw.ai.time_to_first_token"], 64); err == nil {
+						e.TTFTMS = int64(math.Round(f * 1000))
+					}
 				case a["mcp.method.name"] == "tools/call":
 					e.Kind, e.Direction = "tool", "egress"
 					e.Tool = a["gen_ai.tool.name"]

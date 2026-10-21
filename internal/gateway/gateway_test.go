@@ -48,6 +48,9 @@ func TestFromLogsKeepsTheStory(t *testing.T) {
 	for _, e := range evs {
 		if e.Kind == "llm" && e.Tokens == 608 && e.DurationMS == 1775 {
 			found = true
+			if e.InputTokens != 571 || e.OutputTokens != 37 || e.TTFTMS != 1739 {
+				t.Fatalf("stream timing %+v", e)
+			}
 		}
 	}
 	if !found {
