@@ -38,11 +38,26 @@ test('rockShape deterministic and bounded', () => {
   const a = rockShape('cbcec519-0f94');
   assert.deepEqual(a, rockShape('cbcec519-0f94'));
   assert.notDeepEqual(a, rockShape('d6221e2d-aceb'));
-  assert.ok(a.length >= 8 && a.length <= 11, `points ${a.length}`);
   for (const [x, y] of a) {
     const r = Math.hypot(x, y);
-    assert.ok(r >= 18 * 0.7 - 1e-9 && r <= 28 + 1e-9, `radius ${r}`);
+    assert.ok(r >= 6 && r <= 38, `radius ${r}`);
   }
+});
+
+test('asteroids come in clearly different shapes', async () => {
+  const { rockShape, rockKind } = await import('./show.mjs');
+  const uids = Array.from({ length: 60 }, (_, i) => `uid-${i}-${i * 7919}`);
+  const kinds = new Set(uids.map(rockKind));
+  assert.ok(kinds.size >= 4, `only ${[...kinds]} shapes`);
+  const counts = new Set(uids.map((u) => rockShape(u).length));
+  assert.ok(counts.size >= 4, `point counts ${[...counts]}`);
+  const aspect = (pts) => {
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+    return Math.max(w, h) / Math.min(w, h);
+  };
+  const long = uids.filter((u) => rockKind(u) === 'long').map((u) => aspect(rockShape(u)));
+  assert.ok(long.length && Math.min(...long) > 1.3, `long rocks aspect ${long}`);
 });
 
 test('aimAngle points at target', () => {
@@ -158,13 +173,14 @@ test('a call the backend pinned to an actor goes to that actor\'s rock', async (
   assert.equal(attribute({ agent: 'poet', actorUid: 'u1' }, [a, b]), a);
 });
 
-test('a running asteroid grows slowly, up to twice its size', async () => {
+test('a running asteroid visibly grows, fast at first, and keeps growing', async () => {
   const { growScale } = await import('./show.mjs');
   assert.equal(growScale(0), 1);
-  assert.ok(growScale(1000) > 1.1 && growScale(1000) < 1.4, `1s → ${growScale(1000)}`);
-  assert.ok(growScale(2000) > growScale(1000));
-  assert.equal(growScale(60000), 2);
   assert.equal(growScale(-5), 1);
+  assert.ok(growScale(500) >= 1.3, `0.5s → ${growScale(500)}: a short turn must show`);
+  assert.ok(growScale(1000) >= 1.55, `1s → ${growScale(1000)}`);
+  assert.ok(growScale(2000) > growScale(1000) && growScale(4000) > growScale(2000), 'still growing while running');
+  assert.ok(growScale(60000) <= 2.2 + 1e-9 && growScale(60000) > 2.15, `cap ${growScale(60000)}`);
 });
 
 test('call animations last longer for slower real calls, within bounds', async () => {

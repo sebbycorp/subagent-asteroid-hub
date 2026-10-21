@@ -53,16 +53,38 @@ function seeded(str) {
   };
 }
 
-// rockShape is a jagged polygon, the same for the same actor every time.
+const ROCK_KINDS = ['jagged', 'long', 'chunky', 'crater'];
+
+// rockKind picks one of a few asteroid families for an actor, always the same.
+export function rockKind(uid) {
+  return ROCK_KINDS[Math.floor(seeded(`kind:${uid}`)() * ROCK_KINDS.length)];
+}
+
+// rockShape is an asteroid outline, the same for the same actor every time
+// (so a resumed rock is recognisably the same one), drawn from its family:
+//   jagged  deep notches in random places
+//   long    stretched, potato-like
+//   chunky  few big flat faces
+//   crater  a bite taken out of one side
 export function rockShape(uid) {
   const rand = seeded(uid);
-  const n = 8 + Math.floor(rand() * 4);
-  const radius = 18 + rand() * 10;
+  const kind = rockKind(uid);
+  const counts = { jagged: [10, 3], long: [9, 3], chunky: [6, 2], crater: [9, 2] };
+  const [base, spread] = counts[kind];
+  const n = base + Math.floor(rand() * spread);
+  const R = kind === 'long' ? 18 + rand() * 8 : 18 + rand() * 10;
+  const bite = Math.floor(rand() * n);
   const pts = [];
   for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const r = radius * (0.7 + 0.3 * rand());
-    pts.push([Math.cos(a) * r, Math.sin(a) * r]);
+    const a = (i / n) * Math.PI * 2 + (rand() - 0.5) * (1.8 / n);
+    let r;
+    if (kind === 'jagged') r = R * (rand() < 0.4 ? 0.52 + 0.16 * rand() : 0.85 + 0.15 * rand());
+    else if (kind === 'chunky') r = R * (0.7 + 0.3 * rand());
+    else if (kind === 'crater') r = R * (i === bite || i === (bite + 1) % n ? 0.45 + 0.1 * rand() : 0.85 + 0.15 * rand());
+    else r = R * (0.72 + 0.28 * rand());
+    let x = Math.cos(a) * r, y = Math.sin(a) * r;
+    if (kind === 'long') { x *= 1.45; y *= 0.75; }
+    pts.push([x, y]);
   }
   return pts;
 }
@@ -237,10 +259,11 @@ export function attribute(ev, rocks) {
   return live.length === 1 ? live[0] : null;
 }
 
-// growScale is how big a running asteroid has grown: its sandbox is using
-// compute and memory while it works. +25% a second, capped at 2x.
-export function growScale(runningMs) {
-  return Math.min(2, 1 + Math.max(0, runningMs) / 4000);
+// growScale is how big an active asteroid has grown: its sandbox is using
+// compute and memory while it works. Fast at first so even a short turn
+// visibly swells, still growing while it runs, easing towards 2.2x.
+export function growScale(activeMs) {
+  return 1 + 1.2 * (1 - Math.exp(-Math.max(0, activeMs) / 1500));
 }
 
 // fxDuration is how long a gateway call's animation plays: slower real calls

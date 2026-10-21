@@ -72,6 +72,7 @@ function spawnRock(uid, info, from) {
   const r = {
     uid,
     born: performance.now(),
+    runSince: performance.now(), // active from launch: it grows until frozen
     x: from ? from.x : F.x0 + Math.random() * (F.x1 - F.x0),
     y: from ? from.y + 30 : F.y0 + Math.random() * (F.y1 - F.y0),
     vx: Math.cos(angle) * speed,
@@ -182,7 +183,7 @@ function show(ev, now) {
       }
       r.worker = ev.worker;
       r.sub = subLabel({ ...info, state: 'running' });
-      r.runSince = now; // it grows while it works
+      r.runSince ??= now; // it grows while it works (from launch, if it launched)
       break;
     }
     case 'suspend': {
@@ -320,7 +321,7 @@ function reconcile() {
       r.agent = a.agent;
       r.worker = a.worker;
       r.sub = subLabel(a);
-      if (a.state === 'running' && !r.runSince) r.runSince = performance.now();
+      if (!r.runSince) r.runSince = performance.now();
     } else if (want === 'vault') {
       world.rocks.delete(uid);
       world.vault.add(uid);
