@@ -16,7 +16,7 @@ spec:
     accessLog:
       otlp:
         protocol: HTTP
-        url: http://substrate-asteroids:7790/v1/logs
+        url: http://substrate-asteroids:4318/v1/logs
         attributes:
           add:
             - name: asteroids.agent

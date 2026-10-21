@@ -1,5 +1,7 @@
-# Ingress: chats to agents (kagent's A2A gRPC service) enter through the
-# gateway too, so every request in and out of a sandbox crosses agentgateway.
+# Ingress: chats to agents enter through the gateway's a2a-ingress listener
+# (port 8081), which sandboxes are not allowed to reach. Only what a chat
+# needs is routed: the A2A service, the session lookup the client does first,
+# and health checks. The rest of kagent's API stays off the gateway.
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
@@ -9,10 +11,18 @@ spec:
   parentRefs:
     - name: agentgateway-proxy
       namespace: agentgateway-system
+      sectionName: a2a-ingress
   rules:
-    # All of kagent's gRPC (A2A chats plus the session lookup and health
-    # check its clients make first) goes through the gateway.
-    - backendRefs:
+    - matches:
+        - method:
+            service: lf.a2a.v1.A2AService
+        - method:
+            service: kagent.api.v1.SessionService
+            method: GetSession
+        - method:
+            service: grpc.health.v1.Health
+            method: Check
+      backendRefs:
         - name: kagent-controller
           namespace: kagent
           port: 8083

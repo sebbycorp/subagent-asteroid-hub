@@ -1,4 +1,5 @@
-# The one door in and out of every agent sandbox.
+# The one door in and out of every agent sandbox: port 80 for calls out of
+# sandboxes (model, tools), port 8081 for chats in.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -13,3 +14,12 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
+    # Chats into agents (the show's A2A traffic) use their own listener. Sandbox
+    # egress is allow-listed to the port-80 listener their model and tools
+    # point at, so agents cannot reach kagent's API through the gateway.
+    - name: a2a-ingress
+      protocol: HTTP
+      port: 8081
+      allowedRoutes:
+        namespaces:
+          from: Same

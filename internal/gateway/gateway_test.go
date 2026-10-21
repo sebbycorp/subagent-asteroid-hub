@@ -91,13 +91,35 @@ func TestHandlerDecodesProtobuf(t *testing.T) {
 	var got []Event
 	h := Handler(func(evs []Event) { got = append(got, evs...) }, func() time.Time { return now })
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/logs", bytes.NewReader(body)))
+	req := httptest.NewRequest("POST", "/v1/logs", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || len(got) == 0 {
 		t.Fatalf("code %d events %d", rec.Code, len(got))
 	}
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/logs", bytes.NewReader([]byte("not protobuf"))))
+	bad := httptest.NewRequest("POST", "/v1/logs", bytes.NewReader([]byte("not protobuf")))
+	bad.Header.Set("Content-Type", "application/x-protobuf")
+	h.ServeHTTP(rec, bad)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("garbage accepted: %d", rec.Code)
+	}
+}
+
+func TestHandlerRefusesBrowserRequests(t *testing.T) {
+	body, _ := proto.Marshal(fixture(t))
+	h := Handler(func([]Event) {}, func() time.Time { return now })
+	for name, mod := range map[string]func(*http.Request){
+		"origin header":      func(r *http.Request) { r.Header.Set("Origin", "http://evil.example") },
+		"wrong content type": func(r *http.Request) { r.Header.Set("Content-Type", "text/plain") },
+	} {
+		req := httptest.NewRequest("POST", "/v1/logs", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/x-protobuf")
+		mod(req)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code < 400 {
+			t.Errorf("%s: accepted (%d)", name, rec.Code)
+		}
 	}
 }

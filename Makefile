@@ -1,7 +1,7 @@
 IMAGE ?= substrate-asteroids:dev
 KAGENT_API ?= http://host.docker.internal:8083
 # Chats to agents enter through agentgateway (see `make agentgateway`).
-KAGENT_GATEWAY ?= http://host.docker.internal:8090
+KAGENT_GATEWAY ?= http://host.docker.internal:8091
 AGW_VERSION ?= v2026.10.0
 
 .PHONY: test image pf run dev agentgateway relay
@@ -13,11 +13,11 @@ test:
 image:
 	docker build -t $(IMAGE) .
 
-# The kagent API (8083) and agentgateway (8090), reachable from the container
-# via host.docker.internal.
+# The kagent API (8083), agentgateway's sandbox listener (8090) and its chat
+# ingress listener (8091), reachable from the container via host.docker.internal.
 pf:
 	kubectl port-forward -n kagent svc/kagent-controller 8083:8083 & \
-	kubectl port-forward -n agentgateway-system svc/agentgateway-proxy 8090:80 & \
+	kubectl port-forward -n agentgateway-system svc/agentgateway-proxy 8090:80 8091:8081 & \
 	wait
 
 # Solo Enterprise for agentgateway in front of every agent: model (your Qwen

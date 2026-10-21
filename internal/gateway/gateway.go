@@ -5,6 +5,7 @@ package gateway
 
 import (
 	"io"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -97,6 +98,15 @@ func FromLogs(req *collogs.ExportLogsServiceRequest, now time.Time) []Event {
 // events to sink.
 func Handler(sink func([]Event), now func() time.Time) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// agentgateway is not a browser: refuse anything a web page could send.
+		if r.Header.Get("Origin") != "" {
+			http.Error(w, "browser requests refused", http.StatusForbidden)
+			return
+		}
+		if mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mt != "application/x-protobuf" {
+			http.Error(w, "content-type must be application/x-protobuf", http.StatusUnsupportedMediaType)
+			return
+		}
 		b, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

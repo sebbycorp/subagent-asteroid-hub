@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/config"
+	"github.com/sebbycorp/subagent-asteroid-hub/internal/gateway"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/hub"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/kagent"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/server"
@@ -90,14 +91,26 @@ func main() {
 	go h.Run(ctx, 250*time.Millisecond)
 	go gen.Run(ctx)
 
-	srv := &http.Server{Addr: cfg.Listen, Handler: server.New(h, gen, guide, connect, web.Files, conn, server.WithGatewaySink(h.Gateway))}
+	srv := &http.Server{Addr: cfg.Listen, Handler: server.New(h, gen, guide, connect, web.Files, conn)}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		srv.Shutdown(shutdown)
 	}()
-	log.Printf("substrate asteroids on %s, kagent %s", cfg.Listen, cfg.API)
+	// agentgateway's access logs arrive on their own port, reachable only
+	// from the kind network (make run never publishes it).
+	otlp := http.NewServeMux()
+	otlp.Handle("POST /v1/logs", gateway.Handler(h.Gateway, time.Now))
+	otlpSrv := &http.Server{Addr: cfg.OTLPListen, Handler: otlp}
+	go func() {
+		if err := otlpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("otlp receiver: %v", err)
+		}
+	}()
+	go func() { <-ctx.Done(); otlpSrv.Close() }()
+
+	log.Printf("substrate asteroids on %s, kagent %s, agentgateway logs on %s", cfg.Listen, cfg.API, cfg.OTLPListen)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}

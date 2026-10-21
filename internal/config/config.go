@@ -16,6 +16,7 @@ type Config struct {
 	CAFile       string
 	Namespace    string
 	Listen       string
+	OTLPListen   string // agentgateway's access logs; keep unpublished
 	WaveInterval time.Duration
 	AutoWaves    bool
 	DemoAgents   bool
@@ -48,6 +49,9 @@ func FromEnv(lookup func(string) (string, bool)) (Config, error) {
 		CAFile:    str("KAGENT_CA_FILE", ""),
 		Namespace: str("KAGENT_NAMESPACE", "kagent"),
 		Listen:    str("LISTEN_ADDR", ":7790"),
+		// agentgateway pushes its access logs here. Only the kind network
+		// should reach it: don't publish this port.
+		OTLPListen: str("OTLP_LISTEN_ADDR", ":4318"),
 	}
 	d, err := time.ParseDuration(str("WAVE_INTERVAL", "20s"))
 	if err != nil {

@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sebbycorp/subagent-asteroid-hub/internal/gateway"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/traffic"
 )
 
@@ -47,15 +46,6 @@ type ConnInfo struct {
 	Namespace string `json:"namespace"`
 }
 
-// Option configures the server.
-type Option func(*server)
-
-// WithGatewaySink accepts agentgateway's OTLP access logs at POST /v1/logs
-// and hands the requests to sink.
-func WithGatewaySink(sink func([]gateway.Event)) Option {
-	return func(s *server) { s.gatewaySink = sink }
-}
-
 // Connector switches the app to another environment.
 type Connector func(ConnInfo) error
 
@@ -66,21 +56,12 @@ type server struct {
 	connect Connector
 	mu      sync.Mutex
 	conn    ConnInfo
-
-	gatewaySink func([]gateway.Event)
 }
 
 // New builds the HTTP handler.
-func New(h Streamer, w Waves, t Tour, connect Connector, assets fs.FS, initial ConnInfo, opts ...Option) http.Handler {
+func New(h Streamer, w Waves, t Tour, connect Connector, assets fs.FS, initial ConnInfo) http.Handler {
 	s := &server{hub: h, waves: w, tour: t, connect: connect, conn: initial}
-	for _, o := range opts {
-		o(s)
-	}
 	mux := http.NewServeMux()
-	if s.gatewaySink != nil {
-		// agentgateway pushes its access logs here (OTLP/HTTP, protobuf).
-		mux.Handle("POST /v1/logs", gateway.Handler(s.gatewaySink, time.Now))
-	}
 	mux.Handle("GET /", http.FileServerFS(assets))
 	mux.HandleFunc("GET /events", s.events)
 	mux.HandleFunc("POST /api/wave", sameOriginJSON(s.wave))
