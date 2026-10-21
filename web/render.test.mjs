@@ -11,7 +11,8 @@ test('the field steps aside for the tour card', () => {
 });
 
 test('the agentgateway planet floats, inside one shield, within the field', async () => {
-  const { gatewayPos, edgeToward, FIELD, CARD, VAULT, SHIELD_R } = await import('./render.mjs');
+  const { gatewayPos, edgeToward, FIELD, CARD, VAULT, SHIELD_R, PLANET_R } = await import('./render.mjs');
+  assert.ok(PLANET_R >= 60, `planet radius ${PLANET_R}: make it big`);
   const a = gatewayPos(0, false), b = gatewayPos(20000, false);
   assert.ok(Math.hypot(a.x - b.x, a.y - b.y) > 20, 'it moves');
   for (let t = 0; t < 600000; t += 997) {

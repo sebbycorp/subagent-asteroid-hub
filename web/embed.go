@@ -5,5 +5,5 @@ import "embed"
 
 // Files are the page, styles and scripts served at /.
 //
-//go:embed *.html *.css *.mjs
+//go:embed *.html *.css *.mjs *.svg
 var Files embed.FS

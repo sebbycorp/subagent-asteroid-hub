@@ -6,15 +6,15 @@ export const FIELD = { x0: 20, x1: 990, y0: 150, y1: 610 };
 export const VAULT = { x: 1010, y: 150, w: 250, h: 450 };
 // Agentgateway is a planet floating through the field inside one shield;
 // every call into or out of a sandbox (LLM, MCP, A2A) goes through it.
-export const PLANET_R = 40;
-export const SHIELD_R = 62;
+export const PLANET_R = 62;
+export const SHIELD_R = 88;
 
 // gatewayPos is where the planet drifts to at time t: a slow loop through the
 // field, kept right of the tour card while the tour is open.
 export function gatewayPos(t, tourOpen) {
   const s = t / 1000;
-  const [cx, ax] = tourOpen ? [685, 130] : [465, 330];
-  return { x: cx + ax * Math.sin(s * 0.05), y: 362 + 140 * Math.sin(s * 0.09 + 1) };
+  const [cx, ax] = tourOpen ? [685, 115] : [465, 330];
+  return { x: cx + ax * Math.sin(s * 0.05), y: 362 + 118 * Math.sin(s * 0.09 + 1) };
 }
 
 // edgeToward is the point on the shield facing p.
@@ -420,6 +420,9 @@ function hexagon(ctx, x, y, r) {
   ctx.closePath();
 }
 
+// The agentgateway.dev mark, drawn inside the planet.
+const LOGO = typeof Image === 'undefined' ? {} : Object.assign(new Image(), { src: 'agentgateway-mark.svg' });
+
 // drawGatewayPlanet draws agentgateway: a ringed planet inside one hexagonal
 // shield that flares as calls pass, labelled with kagent's models. Slightly
 // dimmed until the gateway has reported a call.
@@ -438,20 +441,22 @@ function drawGatewayPlanet(ctx, world, now) {
   hexagon(ctx, x, y, SHIELD_R - 6);
   stroke(ctx, GW, 1);
   ctx.restore();
-  // the planet: body, latitude bands, a tilted ring
+  // the planet: body, faint bands, a tilted ring, the agentgateway mark inside
   ctx.beginPath();
   ctx.arc(x, y, PLANET_R, 0, Math.PI * 2);
-  stroke(ctx, INK, 1.6);
-  for (const [dy, rx] of [[-22, 33], [-6, 40], [12, 37], [27, 27]]) {
+  stroke(ctx, INK, 1.8);
+  for (const [dy, rx] of [[-46, 41], [46, 41]]) {
     ctx.beginPath();
-    ctx.ellipse(x, y + dy, rx, 4, 0, 0, Math.PI);
+    ctx.ellipse(x, y + dy, rx, 5, 0, 0, Math.PI);
     stroke(ctx, DIM, 1);
   }
   ctx.beginPath();
-  ctx.ellipse(x, y, PLANET_R * 1.55, PLANET_R * 0.32, -0.32, 0.15 * Math.PI, 0.85 * Math.PI, true);
-  stroke(ctx, INK, 1.3);
-  hexagon(ctx, x, y - 2, 9); // shield crest on the surface
-  stroke(ctx, GW, 1.6);
+  ctx.ellipse(x, y, PLANET_R * 1.5, PLANET_R * 0.3, -0.32, 0.12 * Math.PI, 0.88 * Math.PI, true);
+  stroke(ctx, INK, 1.4);
+  if (LOGO.complete && LOGO.naturalWidth) {
+    const size = PLANET_R * 2.5; // the mark fills about half its square artboard
+    ctx.drawImage(LOGO, x - size / 2, y - size / 2, size, size);
+  }
   text(ctx, seen ? 'AGENTGATEWAY' : 'AGENTGATEWAY · NO CALLS YET', x, y - SHIELD_R - 12, { size: 11, align: 'center', spacing: 3, color: GW });
   // the models kagent uses
   const models = world.state?.snapshot?.models || [];
