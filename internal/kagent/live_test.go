@@ -147,3 +147,39 @@ func TestLiveHumanApproval(t *testing.T) {
 	}
 	t.Logf("answer after approval: %q", done.Reply)
 }
+
+// k8s-operator (deploy/agentgateway/45-k8s-operator.yaml): reads run freely,
+// changes wait for a human. The change is rejected, so nothing is touched.
+func TestLiveOperatorApprovesOnlyChanges(t *testing.T) {
+	ctx := context.Background()
+	c := liveClient(t)
+	id, err := c.CreateSession(ctx, traffic.AgentRef{Namespace: "kagent", Name: "k8s-operator"}, fmt.Sprintf("asteroids-it-%d", time.Now().Unix()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.DeleteSession(ctx, id) })
+	read, err := c.Chat(ctx, id, "How many deployments are in the kagent namespace?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.Approval != nil || !strings.ContainsAny(read.Reply, "0123456789") {
+		t.Fatalf("a read should answer without approval, got %+v", read)
+	}
+	t.Logf("read: %q", read.Reply)
+	write, err := c.Chat(ctx, id, "Scale the deployment kagent-tools in namespace kagent to 2 replicas.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if write.Approval == nil || write.Approval.Tools[0].Name != "k8s_scale" {
+		t.Fatalf("a change should wait for approval of k8s_scale, got %+v", write)
+	}
+	t.Logf("waiting on a human for %s %v", write.Approval.Tools[0].Name, write.Approval.Tools[0].Args)
+	done, err := c.Decide(ctx, id, write.Approval, false, "a human rejected this tool call")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Approval != nil {
+		t.Fatalf("after rejection it asked again: %+v", done)
+	}
+	t.Logf("after rejection: %q", done.Reply)
+}

@@ -8,8 +8,8 @@ export const FIELD = { x0: 20, x1: 990, y0: 150, y1: 610 };
 export const VAULT = { x: 1010, y: 150, w: 250, h: 450 };
 // Agentgateway is a planet floating through the field inside one shield;
 // every call into or out of a sandbox (LLM, MCP, A2A) goes through it.
-export const PLANET_R = 62;
-export const SHIELD_R = 88;
+export const PLANET_R = 31;
+export const SHIELD_R = 44;
 
 // gatewayPos is where the planet drifts to at time t: a slow loop through the
 // field, kept right of the tour card while the tour is open.

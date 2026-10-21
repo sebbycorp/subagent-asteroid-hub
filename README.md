@@ -74,6 +74,10 @@ for agentgateway `v2026.10.0` in the kind cluster and applies
   gateway, not in the agents.
 - **Tools:** each agent gets kagent's Kubernetes tools (MCP) through the
   gateway.
+- **Human in the loop:** `k8s-operator` reads the cluster freely, but every
+  change it wants to make (scale, rollout, patch, label, annotate, delete,
+  apply) waits for a person to approve or reject it, in the kagent UI or in
+  the show (Y/X). It is suspended while it waits. It has no exec tool.
 - **Chats in:** the show's chats enter through a separate gateway listener
   (`:8081`) that routes only the A2A service, the session lookup and health
   checks. The sandboxes can't reach it, so agents can't use the gateway to

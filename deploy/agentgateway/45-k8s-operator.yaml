@@ -1,0 +1,50 @@
+# k8s-operator: a realistic human-in-the-loop agent. Reading the cluster runs
+# freely; anything that changes it pauses for a person's approval (kagent puts
+# approval on a whole tool binding, so reads and writes are two bindings).
+# While it waits, Substrate suspends it: 0 CPU, worker freed.
+# Not granted at all: k8s_execute_command, k8s_create_resource_from_url.
+apiVersion: api.kagent.dev/v1alpha3
+kind: RemoteMCPServer
+metadata:
+  name: agw-tools-k8s-operator
+  namespace: kagent
+spec:
+  description: kagent Kubernetes tools, via agentgateway
+  protocol: STREAMABLE_HTTP
+  url: http://agentgateway-proxy.agentgateway-system.svc.cluster.local/mcp/kagent-tools
+  headersFrom:
+    - name: x-asteroids-agent
+      value: k8s-operator
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: Agent
+metadata:
+  name: k8s-operator
+  namespace: kagent
+spec:
+  harnessRef:
+    name: kagent-default
+  template:
+    inline:
+      description: Kubernetes operator. Reads freely; every change to the cluster needs a human's approval.
+      modelConfig:
+        name: default-model-config
+      systemPrompt: |
+        You are a careful Kubernetes operator. Use your read tools to look at the cluster.
+        When asked to change something, call the right write tool; a human approves or
+        rejects each change before it runs. If a change is rejected, say so and do not retry.
+        Keep answers short.
+      tools:
+        # reads: no approval
+        - mcp:
+            server:
+              kind: RemoteMCPServer
+              name: agw-tools-k8s-operator
+            tools: [k8s_get_resources, k8s_get_events, k8s_describe_resource, k8s_get_pod_logs, k8s_get_resource_yaml]
+        # changes: a human approves each call
+        - mcp:
+            server:
+              kind: RemoteMCPServer
+              name: agw-tools-k8s-operator
+            tools: [k8s_scale, k8s_rollout, k8s_patch_resource, k8s_label_resource, k8s_annotate_resource, k8s_delete_resource, k8s_apply_manifest]
+            requireApproval: true
