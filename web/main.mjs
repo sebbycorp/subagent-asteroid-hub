@@ -6,7 +6,7 @@ import {
   newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
   logLine, portFor, attribute, growScale, fxDuration, fxLabel, llmTiming, DELAY_MS,
 } from './show.mjs';
-import { setup, draw, saucerSpots, vaultSlot, activeField, gatewayPos, NEW, RESUMED, GW, ALIEN } from './render.mjs';
+import { setup, draw, saucerSpots, vaultSlot, activeField, gatewayPos, fighterPos, NEW, RESUMED, GW, ALIEN } from './render.mjs';
 
 const ACTIVE = new Set(['resuming', 'running', 'suspending']);
 const canvas = document.getElementById('stage');
@@ -570,8 +570,10 @@ function frame(now) {
   // autopilot: drift on a slow figure-eight, turn toward the next suspend
   const t = now / 1000;
   const ship = world.ship;
-  ship.x = 505 + 300 * Math.sin(t * 0.09);
-  ship.y = 480 + 70 * Math.sin(t * 0.18);
+  // patrol opposite the agentgateway planet, easing between tour lanes too
+  const fp = fighterPos(now, !!world.tour);
+  ship.x += (fp.x - ship.x) * Math.min(1, dt * 1.2);
+  ship.y += (fp.y - ship.y) * Math.min(1, dt * 1.2);
   const targetUid = nextSuspend(queue);
   let target = targetUid && world.rocks.get(targetUid);
   if (!target) {

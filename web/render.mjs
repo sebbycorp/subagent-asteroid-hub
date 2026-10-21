@@ -14,9 +14,25 @@ export const SHIELD_R = 88;
 // gatewayPos is where the planet drifts to at time t: a slow loop through the
 // field, kept right of the tour card while the tour is open.
 export function gatewayPos(t, tourOpen) {
-  const s = t / 1000;
+  const a = orbitPhase(t);
   const [cx, ax] = tourOpen ? [685, 115] : [465, 330];
-  return { x: cx + ax * Math.sin(s * 0.05), y: 362 + 118 * Math.sin(s * 0.09 + 1) };
+  return { x: cx + ax * Math.sin(a), y: 362 + 118 * Math.cos(a) };
+}
+
+// The planet and the fighter share one slow orbit, on opposite sides of it:
+// when one swings right the other swings left, when one is high the other is
+// low, so they never come near each other.
+function orbitPhase(t) {
+  return (t / 1000) * 0.05;
+}
+
+// fighterPos is where the fighter patrols: opposite the agentgateway planet
+// (and, while the tour card is open, mirrored within the field beside it).
+export function fighterPos(t, tourOpen) {
+  const a = orbitPhase(t);
+  const y = 400 - 110 * Math.cos(a);
+  if (tourOpen) return { x: 1370 - gatewayPos(t, true).x, y }; // mirrored within the planet's tour lane
+  return { x: 505 - 300 * Math.sin(a), y };
 }
 
 // edgeToward is the point on the shield facing p.
