@@ -7,7 +7,7 @@ a real cluster, read from the kagent 1.0 API. Press `T` and the app sends a
 wave of real chats to your agents. It never chats on its own unless you turn
 automatic waves on.
 
-![A wave of real chats: the kagent robot's cannon fires the agents out as asteroids, they run, and the rocket shoots each one down into the snapshot store as it suspends](docs/media/show.gif)
+![A wave of real chats: the kagent robot's cannon fires the agents out as asteroids, they run, and the rocket shoots each one down into the snapshot store as it suspends](docs/media/asteroids-show.gif)
 
 *A wave of real chats on a local kind cluster: four agents launch from the
 worker pool's saucer, run on its one worker, and are frozen into the snapshot
@@ -51,7 +51,7 @@ the live show while each chapter does something real on the cluster:
 | 6 · Human in the loop | asks `asteroids-demo-ops` (tools need approval) a cluster question | it pauses to ask; Substrate freezes it (0 CPU) while it waits; its pilot holds up the request; `Y`/`X` resumes it |
 | 7 · Density | sends a wave across every agent | sessions hold a worker only while thinking: many agents, few machines |
 
-![The guided tour: create, suspend, resume (the agent still knows ORION), and fork](docs/media/tour.gif)
+![The guided tour: create, suspend, resume (the agent still knows ORION), and fork](docs/media/asteroids-tour.gif)
 
 Rocks the tour is talking about get bracket markers, and the card's last line
 is the live state of that actor. `N` steps forward, `Esc` ends the tour.
