@@ -22,7 +22,10 @@ store the instant each turn ends.*
 | Capsule rising from the store, then the same rock relaunching | a **resume**: the actor's snapshot is restored onto a worker |
 | Rock drifting, labelled `RUNNING ON WORKER …` | an actor **running** a turn |
 | Ship fires, rock breaks up, capsule drops into the store | a **suspend**: memory and disk are checkpointed to S3 and the worker is freed |
-| Snapshot store | every suspended actor, stored at 0 CPU and 0 memory |
+| Snapshot store | every suspended actor, stored at 0 CPU and 0 memory, with a live log underneath |
+| Cyan rock / amber rock | a **new** session (cloned from the agent's golden snapshot) / a **resumed** one (restored from its own snapshot, generation shown) |
+| Planets on the left, behind a hexagon gate | the outside world (your model, MCP tools, people chatting in) behind **agentgateway** |
+| Green hexagon shield on a rock + a beam through the gate | a real request agentgateway handled for that agent: a model call, a tool call, or a chat coming in |
 
 The ship doesn't cause the suspend. Substrate suspends an actor by itself, the
 moment its turn ends. On a local kind cluster that's within a few milliseconds
@@ -34,7 +37,7 @@ the total number of suspends.
 
 ## Guided tour
 
-Press `N` (or click **▶ TOUR**) for a five-chapter lesson. A card floats over
+Press `N` (or click **▶ TOUR**) for a six-chapter lesson. A card floats over
 the live show while each chapter does something real on the cluster:
 
 | Chapter | What happens on the cluster | What it teaches |
@@ -43,7 +46,8 @@ the live show while each chapter does something real on the cluster:
 | 2 · Suspend | nothing: the session has already frozen itself | memory + disk go to S3 the moment a turn ends; 0 CPU while idle |
 | 3 · Resume | asks "what was the code word?" | the snapshot is restored onto a worker in ~100 ms and the agent answers ORION: state survived |
 | 4 · Fork | checkpoints the session and forks a new one from it, then asks the fork | the asteroid splits in two, and the fork answers ORION too |
-| 5 · Density | sends a wave across every agent | sessions hold a worker only while thinking: many agents, few machines |
+| 5 · Agentgateway | asks the agent a cluster question it must use a tool for | its model call and tool call both leave the sandbox through agentgateway (shield + beams); the agent holds no keys |
+| 6 · Density | sends a wave across every agent | sessions hold a worker only while thinking: many agents, few machines |
 
 ![The guided tour: create, suspend, resume (the agent still knows ORION), and fork](docs/media/tour.gif)
 
@@ -52,19 +56,49 @@ is the live state of that actor. `N` steps forward, `Esc` ends the tour.
 Automatic waves pause while the tour runs. Tour sessions are named
 `asteroids-tour-…`.
 
+## Agentgateway: every call in and out of a sandbox
+
+`make agentgateway` (needs `AGENTGATEWAY_LICENSE_KEY`) installs Solo Enterprise
+for agentgateway `v2026.10.0` in the kind cluster and applies
+`deploy/agentgateway/`:
+
+- **Model:** agents reach their model only through the gateway. Out of the
+  box that's your **Qwen** (`qwen3:8b` on Ollama on this Mac, reached via the
+  `ollama-relay` container so Ollama stays bound to localhost), with
+  `reasoning_effort: none` so turns take seconds. An `/openai` route also
+  exists. The real OpenAI key lives only in the gateway's `openai-secret`.
+  Agents hold just a placeholder (`no-real-key`), so swapping models happens
+  in the gateway, not in the agents.
+- **Tools:** each agent gets kagent's Kubernetes tools (MCP) through the
+  gateway.
+- **Chats in:** the show's chats enter through a separate gateway listener
+  (`:8081`) that routes only the A2A service, the session lookup and health
+  checks. The sandboxes can't reach it, so agents can't use the gateway to
+  reach kagent's API.
+- **Enforced, not just configured:** Substrate allow-lists each sandbox's
+  egress from its model and tools, so the gateway is the only place an agent
+  can reach. Sessions created before the switch keep their old configuration
+  baked into their snapshots: delete them.
+- **The show sees it:** the gateway sends its OTLP access logs (tagged with
+  the calling agent via `x-asteroids-agent`) to the app on `:4318`, which is
+  only reachable from the kind network. A shield appears only for a request
+  the gateway really handled.
+
 ## Quick start (local kind cluster)
 
 You need kagent 1.0 (tested with `v1.0.0-alpha16` and Substrate `0.6.0-alpha3`)
 and Docker.
 
 ```bash
-make pf        # terminal 1: port-forward the kagent API to localhost:8083
+make agentgateway   # once: agentgateway in front of every agent
+make pf        # terminal 1: port-forward kagent (8083) and agentgateway (8090, 8091)
 make image run # terminal 2: build and run the container
 open http://localhost:7790
 ```
 
 `make run` publishes the app on `127.0.0.1` only, because its control API
-spends your model budget. If the container can't reach the port-forward,
+spends your model budget. Add `LAN_IP=172.16.10.37` to also publish it on
+your LAN. If the container can't reach the port-forward,
 start the port-forward with
 `kubectl port-forward --address 0.0.0.0 -n kagent svc/kagent-controller 8083:8083`.
 
@@ -89,7 +123,8 @@ A Stream Deck or script can trigger a wave with
 | Env var | Default | Meaning |
 |---------|---------|---------|
 | `KAGENT_API` | `http://host.docker.internal:8083` | kagent controller API (gRPC) |
-| `KAGENT_GATEWAY` | same as API | A2A gateway, if separate |
+| `KAGENT_GATEWAY` | same as API | A2A endpoint for chats (`make run` uses agentgateway's ingress, `:8091`) |
+| `OTLP_LISTEN_ADDR` | `:4318` | where agentgateway's access logs arrive; never publish it |
 | `KAGENT_USER_ID` | `admin@kagent.dev` | sent as `x-user-id` |
 | `KAGENT_TOKEN` | — | optional bearer token |
 | `KAGENT_CA_FILE` | — | CA file for TLS endpoints (mount it into the container) |
