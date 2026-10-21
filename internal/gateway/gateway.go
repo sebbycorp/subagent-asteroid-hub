@@ -22,7 +22,8 @@ type Event struct {
 	Kind       string    `json:"kind"`      // llm | tool | chat
 	Direction  string    `json:"direction"` // egress (out of a sandbox) | ingress (into an agent)
 	Agent      string    `json:"agent,omitempty"`
-	Target     string    `json:"target"` // the route's backend, e.g. qwen, kagent-tools, kagent-a2a
+	ActorUID   string    `json:"actorUid,omitempty"` // set when the caller is known
+	Target     string    `json:"target"`             // the route's backend, e.g. qwen, kagent-tools, kagent-a2a
 	Model      string    `json:"model,omitempty"`
 	Tool       string    `json:"tool,omitempty"`
 	Status     int       `json:"status"`

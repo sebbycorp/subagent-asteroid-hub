@@ -386,3 +386,50 @@ func TestHubGatewayEventsBroadcastAndCount(t *testing.T) {
 		t.Fatalf("gateway stats %+v", g)
 	}
 }
+
+// Model calls share one model config, so they arrive without an agent name;
+// the hub names the agent when exactly one actor is running at the time.
+func TestHubAttributesUntaggedCallToTheOnlyRunningActor(t *testing.T) {
+	h := New(src(ok(0, act("a", model.StateRunning, 1, 0), act("b", model.StateSuspended, 1, 0))), "env")
+	h.Tick(context.Background())
+	ch, cancel := h.Subscribe()
+	defer cancel()
+	drain(ch)
+	h.Gateway([]gateway.Event{{Kind: "llm", Direction: "egress", Target: "qwen"}, {Kind: "chat", Direction: "ingress"}})
+	var got []gateway.Event
+	for range len(ch) {
+		var m struct {
+			Type    string        `json:"type"`
+			Gateway gateway.Event `json:"gateway"`
+		}
+		json.Unmarshal(<-ch, &m)
+		if m.Type == "gateway" {
+			got = append(got, m.Gateway)
+		}
+	}
+	if len(got) != 2 || got[0].Agent != "hello-substrate" || got[0].ActorUID != "a" {
+		t.Fatalf("llm call not attributed: %+v", got)
+	}
+	if got[1].Agent != "" {
+		t.Fatalf("ingress chat attributed: %+v", got[1])
+	}
+}
+
+func TestHubLeavesUntaggedCallUnattributedWhenAmbiguous(t *testing.T) {
+	h := New(src(ok(0, act("a", model.StateRunning, 1, 0), act("b", model.StateRunning, 1, 0))), "env")
+	h.Tick(context.Background())
+	ch, cancel := h.Subscribe()
+	defer cancel()
+	drain(ch)
+	h.Gateway([]gateway.Event{{Kind: "llm", Direction: "egress", Target: "qwen"}})
+	for range len(ch) {
+		var m struct {
+			Type    string        `json:"type"`
+			Gateway gateway.Event `json:"gateway"`
+		}
+		json.Unmarshal(<-ch, &m)
+		if m.Type == "gateway" && m.Gateway.Agent != "" {
+			t.Fatalf("guessed an agent: %+v", m.Gateway)
+		}
+	}
+}

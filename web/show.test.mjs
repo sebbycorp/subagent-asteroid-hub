@@ -142,3 +142,18 @@ test('gateway chapter live line counts this agent\'s gateway calls', async () =>
   const line = liveLine({ kind: 'gateway', focus: ['s1'] }, { snapshot: { actors: {} } }, { llm: 2, tool: 1 });
   assert.equal(line, 'LIVE: AGENTGATEWAY HANDLED 2 MODEL CALLS · 1 TOOL CALL');
 });
+
+test('a gateway call is pinned on an asteroid only when it is unambiguous', async () => {
+  const { attribute } = await import('./show.mjs');
+  const a = { agent: 'poet', born: 1 }, b = { agent: 'coder', born: 2 }, dying = { agent: 'scout', born: 3, dying: true };
+  assert.equal(attribute({ agent: 'coder' }, [a, b]), b, 'tagged call: its agent');
+  assert.equal(attribute({}, [a, dying]), a, 'untagged call, one busy asteroid: that one');
+  assert.equal(attribute({}, [a, b]), null, 'untagged call, several busy: none');
+  assert.equal(attribute({ agent: 'ghost' }, [a]), null, 'tagged call for an agent not on screen: none');
+});
+
+test('a call the backend pinned to an actor goes to that actor\'s rock', async () => {
+  const { attribute } = await import('./show.mjs');
+  const a = { uid: 'u1', agent: 'poet', born: 1 }, b = { uid: 'u2', agent: 'poet', born: 2 };
+  assert.equal(attribute({ agent: 'poet', actorUid: 'u1' }, [a, b]), a);
+});

@@ -65,10 +65,11 @@ for agentgateway `v2026.10.0` in the kind cluster and applies
 - **Model:** agents reach their model only through the gateway. Out of the
   box that's your **Qwen** (`qwen3:8b` on Ollama on this Mac, reached via the
   `ollama-relay` container so Ollama stays bound to localhost), with
-  `reasoning_effort: none` so turns take seconds. An `/openai` route also
-  exists. The real OpenAI key lives only in the gateway's `openai-secret`.
-  Agents hold just a placeholder (`no-real-key`), so swapping models happens
-  in the gateway, not in the agents.
+  `reasoning_effort: none` so turns take seconds. There is **one** model
+  config, kagent's `default-model-config`, pointed at the gateway and holding
+  only a placeholder key. An `/openai` route also exists; the real OpenAI key
+  lives only in the gateway's `openai-secret`. Swapping models happens in the
+  gateway, not in the agents.
 - **Tools:** each agent gets kagent's Kubernetes tools (MCP) through the
   gateway.
 - **Chats in:** the show's chats enter through a separate gateway listener
@@ -79,10 +80,12 @@ for agentgateway `v2026.10.0` in the kind cluster and applies
   egress from its model and tools, so the gateway is the only place an agent
   can reach. Sessions created before the switch keep their old configuration
   baked into their snapshots: delete them.
-- **The show sees it:** the gateway sends its OTLP access logs (tagged with
-  the calling agent via `x-asteroids-agent`) to the app on `:4318`, which is
-  only reachable from the kind network. A shield appears only for a request
-  the gateway really handled.
+- **The show sees it:** the gateway sends its OTLP access logs to the app on
+  `:4318`, which is only reachable from the kind network. Tool calls carry
+  their agent (`x-asteroids-agent` on each agent's tool connection). Model
+  calls share one config, so the app pins them to the only running actor, or
+  to none when several are busy. A shield appears only for a request the
+  gateway really handled.
 
 ## Quick start (local kind cluster)
 

@@ -40,6 +40,12 @@ agentgateway: relay
 	kubectl create secret generic openai-secret -n agentgateway-system \
 	  --from-literal=Authorization="$$OPENAI_API_KEY" --dry-run=client -o yaml | kubectl apply -f -
 	kubectl apply -f deploy/agentgateway/
+	# kagent's one model: your Qwen via the gateway, with only a placeholder key
+	helm upgrade kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version 1.0.0-alpha16 -n kagent --reuse-values \
+	  --set providers.default=openAI --set providers.openAI.model=qwen3:8b \
+	  --set-string providers.openAI.apiKey=agentgateway-holds-the-real-key \
+	  --set providers.openAI.config.baseUrl=http://agentgateway-proxy.agentgateway-system.svc.cluster.local/qwen/v1 \
+	  --set providers.openAI.config.reasoningEffort=none --wait
 
 # Lets the cluster reach Ollama on this Mac without exposing it to the LAN.
 relay:

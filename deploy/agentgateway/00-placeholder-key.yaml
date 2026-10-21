@@ -1,8 +1,0 @@
-# The only "API key" agents hold. It is not a key: agentgateway replaces it.
-apiVersion: v1
-kind: Secret
-metadata:
-  name: no-real-key
-  namespace: kagent
-stringData:
-  OPENAI_API_KEY: agentgateway-holds-the-real-key

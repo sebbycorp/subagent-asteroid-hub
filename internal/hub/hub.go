@@ -151,6 +151,26 @@ func (h *Hub) Gateway(evs []gateway.Event) {
 	defer h.mu.Unlock()
 	g := &h.state.Gateway
 	g.Seen = true
+	// Model calls share one model config and carry no agent name; when only
+	// one actor is running, the call is its. Otherwise leave it unnamed.
+	var running []model.Actor
+	for _, a := range h.state.Snapshot.Actors {
+		if a.State == model.StateRunning || a.State == model.StateResuming {
+			running = append(running, a)
+		}
+	}
+	for i := range evs {
+		e := &evs[i]
+		if e.Direction != "egress" {
+			continue
+		}
+		for _, a := range running {
+			if e.Agent == "" && len(running) == 1 || e.Agent != "" && a.Agent == e.Agent {
+				e.Agent, e.ActorUID = a.Agent, a.UID
+				break
+			}
+		}
+	}
 	for _, e := range evs {
 		switch e.Kind {
 		case "llm":

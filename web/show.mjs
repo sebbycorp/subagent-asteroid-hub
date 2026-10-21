@@ -221,3 +221,18 @@ export function planetFor(ev) {
   if (ev.kind === 'tool') return { key: 'tools', label: 'K8S TOOLS' };
   return { key: 'model', label: String(ev.model || ev.target).toUpperCase() };
 }
+
+// attribute picks the asteroid a gateway request belongs to. Tool calls carry
+// their agent; model calls share one model config and don't, so they go to
+// the only busy asteroid — or to none rather than a guess.
+export function attribute(ev, rocks) {
+  const live = rocks.filter((r) => !r.dying);
+  if (ev.actorUid) {
+    const pinned = live.find((r) => r.uid === ev.actorUid);
+    if (pinned) return pinned;
+  }
+  if (ev.agent) {
+    return live.filter((r) => r.agent === ev.agent).sort((x, y) => y.born - x.born)[0] || null;
+  }
+  return live.length === 1 ? live[0] : null;
+}

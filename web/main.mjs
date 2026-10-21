@@ -4,7 +4,7 @@
 import {
   newQueue, schedule, due, pending, nextSuspend, rockShape, aimAngle, wrapLines, settled,
   newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
-  logLine, planetFor, DELAY_MS,
+  logLine, planetFor, attribute, DELAY_MS,
 } from './show.mjs';
 import { setup, draw, saucerSpots, vaultSlot, activeField, FX_MS, NEW, RESUMED, GW } from './render.mjs';
 
@@ -254,18 +254,13 @@ function tourAgent() {
 function showGateway(ev, now) {
   const planet = planetFor(ev);
   if (ev.kind === 'llm') world.modelLabel = planet.label;
-  let rock = null;
-  if (ev.agent) {
-    for (const r of world.rocks.values()) {
-      if (r.agent === ev.agent && !r.dying && (!rock || r.born > rock.born)) rock = r;
-    }
-  }
+  const rock = ev.direction === 'egress' ? attribute(ev, [...world.rocks.values()]) : null;
   const label = ev.kind === 'chat' ? 'A2A CHAT IN' : ev.kind === 'tool' ? `TOOL ${String(ev.tool).toUpperCase()}` : planet.label;
   const to = ev.kind === 'chat' ? saucerFor((pools()[0] || {}).name) : null;
   world.gwFx.push({ rock, planet: planet.key, label, born: now, ingress: ev.direction === 'ingress', to: to && { x: to.x, y: to.y + 20 } });
   world.gateFlash = now;
-  logPush({ src: 'gateway', ...ev }, GW);
-  if (world.tour?.kind === 'gateway' && ev.agent && ev.agent === tourAgent()) {
+  logPush({ src: 'gateway', ...ev, agent: ev.agent || rock?.agent }, GW);
+  if (world.tour?.kind === 'gateway' && (ev.agent || rock?.agent) === tourAgent()) {
     if (ev.kind === 'llm') world.tourGw.llm++;
     if (ev.kind === 'tool') world.tourGw.tool++;
     world.tourLive = liveLine(world.tour, world.state, world.tourGw);

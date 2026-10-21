@@ -1,28 +1,12 @@
 # Every agent reaches the outside world only through agentgateway:
-#  - its model (your qwen3:8b) is reached via the gateway's /qwen route, with
-#    a placeholder key (Secret no-real-key); swap models at the gateway
-#    (/openai holds the real OpenAI key) without touching the agents
-#  - its tools come from kagent-tools via the gateway's /mcp route
-# Each agent stamps x-asteroids-agent on every call so the show can put the
-# shield on the right asteroid. Substrate's egress allow-list is inferred
-# from these, so the gateway is the only place a sandbox can reach.
----
-apiVersion: api.kagent.dev/v1alpha3
-kind: ModelConfig
-metadata:
-  name: agw-hello-substrate
-  namespace: kagent
-spec:
-  provider: OpenAI
-  model: qwen3:8b
-  stream: true
-  apiKeySecret: no-real-key
-  apiKeySecretKey: OPENAI_API_KEY
-  defaultHeaders:
-    x-asteroids-agent: hello-substrate
-  openAI:
-    baseUrl: http://agentgateway-proxy.agentgateway-system.svc.cluster.local/qwen/v1
-    reasoningEffort: none
+#  - one shared model: kagent's default-model-config, set by `make
+#    agentgateway` to your qwen3:8b via the gateway's /qwen route, with only a
+#    placeholder key in kagent (the gateway holds any real credentials)
+#  - its tools come from kagent-tools via the gateway's /mcp route, each
+#    agent's connection stamped x-asteroids-agent so the show can put the
+#    tool-call shield on the right asteroid
+# Substrate's egress allow-list is inferred from these, so the gateway is the
+# only place a sandbox can reach.
 ---
 apiVersion: api.kagent.dev/v1alpha3
 kind: RemoteMCPServer
@@ -49,7 +33,7 @@ spec:
     inline:
       description: Substrate Asteroids demo agent (all traffic via agentgateway)
       modelConfig:
-        name: agw-hello-substrate
+        name: default-model-config
       systemPrompt: "You are hello-substrate, a friendly agent running inside a gVisor sandbox on Agent Substrate. Use your Kubernetes tools when asked about the cluster."
       tools:
         - mcp:
@@ -57,23 +41,6 @@ spec:
               kind: RemoteMCPServer
               name: agw-tools-hello-substrate
             tools: [k8s_get_resources, k8s_get_events]
----
-apiVersion: api.kagent.dev/v1alpha3
-kind: ModelConfig
-metadata:
-  name: agw-asteroids-demo-scout
-  namespace: kagent
-spec:
-  provider: OpenAI
-  model: qwen3:8b
-  stream: true
-  apiKeySecret: no-real-key
-  apiKeySecretKey: OPENAI_API_KEY
-  defaultHeaders:
-    x-asteroids-agent: asteroids-demo-scout
-  openAI:
-    baseUrl: http://agentgateway-proxy.agentgateway-system.svc.cluster.local/qwen/v1
-    reasoningEffort: none
 ---
 apiVersion: api.kagent.dev/v1alpha3
 kind: RemoteMCPServer
@@ -100,7 +67,7 @@ spec:
     inline:
       description: Substrate Asteroids demo agent (all traffic via agentgateway)
       modelConfig:
-        name: agw-asteroids-demo-scout
+        name: default-model-config
       systemPrompt: "You are Scout. Answer in one short, friendly sentence. Use your Kubernetes tools when asked about the cluster."
       tools:
         - mcp:
@@ -108,23 +75,6 @@ spec:
               kind: RemoteMCPServer
               name: agw-tools-asteroids-demo-scout
             tools: [k8s_get_resources, k8s_get_events]
----
-apiVersion: api.kagent.dev/v1alpha3
-kind: ModelConfig
-metadata:
-  name: agw-asteroids-demo-coder
-  namespace: kagent
-spec:
-  provider: OpenAI
-  model: qwen3:8b
-  stream: true
-  apiKeySecret: no-real-key
-  apiKeySecretKey: OPENAI_API_KEY
-  defaultHeaders:
-    x-asteroids-agent: asteroids-demo-coder
-  openAI:
-    baseUrl: http://agentgateway-proxy.agentgateway-system.svc.cluster.local/qwen/v1
-    reasoningEffort: none
 ---
 apiVersion: api.kagent.dev/v1alpha3
 kind: RemoteMCPServer
@@ -151,7 +101,7 @@ spec:
     inline:
       description: Substrate Asteroids demo agent (all traffic via agentgateway)
       modelConfig:
-        name: agw-asteroids-demo-coder
+        name: default-model-config
       systemPrompt: "You are Coder, a terse programmer. Answer in one sentence. Use your Kubernetes tools when asked about the cluster."
       tools:
         - mcp:
@@ -159,23 +109,6 @@ spec:
               kind: RemoteMCPServer
               name: agw-tools-asteroids-demo-coder
             tools: [k8s_get_resources, k8s_get_events]
----
-apiVersion: api.kagent.dev/v1alpha3
-kind: ModelConfig
-metadata:
-  name: agw-asteroids-demo-poet
-  namespace: kagent
-spec:
-  provider: OpenAI
-  model: qwen3:8b
-  stream: true
-  apiKeySecret: no-real-key
-  apiKeySecretKey: OPENAI_API_KEY
-  defaultHeaders:
-    x-asteroids-agent: asteroids-demo-poet
-  openAI:
-    baseUrl: http://agentgateway-proxy.agentgateway-system.svc.cluster.local/qwen/v1
-    reasoningEffort: none
 ---
 apiVersion: api.kagent.dev/v1alpha3
 kind: RemoteMCPServer
@@ -202,7 +135,7 @@ spec:
     inline:
       description: Substrate Asteroids demo agent (all traffic via agentgateway)
       modelConfig:
-        name: agw-asteroids-demo-poet
+        name: default-model-config
       systemPrompt: "You are Poet. Answer in a single short line of verse. Use your Kubernetes tools when asked about the cluster."
       tools:
         - mcp:
