@@ -18,11 +18,11 @@ store the instant each turn ends.*
 | On screen | In Agent Substrate |
 |-----------|--------------------|
 | UFO saucer | a **WorkerPool**; the small bays under it are its **workers** (lit while hosting an actor) |
-| Alien scout launched from the kagent mothership | an actor being **created** (a new session gets a fresh gVisor sandbox); four scout designs, each session always the same one |
-| Capsule rising from the store, then the same scout relaunching | a **resume**: the actor's snapshot is restored onto a worker |
-| Scout flying and growing, labelled `RUNNING ON WORKER …` | an actor **running** a turn (it powers up while its sandbox works) |
-| Fighter fires, scout breaks up, capsule drops into the store | a **suspend**: memory and disk are checkpointed to S3 and the worker is freed |
-| Grey, dashed, frozen scout with its alien pilot holding up a sign | **human in the loop**: the agent asked to run a tool and is suspended (0 CPU) until someone presses `Y` or `X` |
+| Round UFO launched from the kagent mothership | an actor being **created** (a new session gets a fresh gVisor sandbox); four UFO styles (disc, ringed, spiked, twin), each session always the same one |
+| Capsule rising from the store, then the same UFO relaunching | a **resume**: the actor's snapshot is restored onto a worker |
+| UFO spinning and growing, labelled `RUNNING ON WORKER …` | an actor **running** a turn (it powers up while its sandbox works) |
+| Fighter fires, UFO breaks up, capsule drops into the store | a **suspend**: memory and disk are checkpointed to S3 and the worker is freed |
+| Grey, dashed, frozen UFO with its alien pilot holding up a sign | **human in the loop**: the agent asked to run a tool and is suspended (0 CPU) until someone presses `Y` or `X` |
 | Snapshot store | every suspended actor, stored at 0 CPU and 0 memory, with a live log underneath |
 | Cyan rock / amber rock | a **new** session (cloned from the agent's golden snapshot) / a **resumed** one (restored from its own snapshot, generation shown) |
 | Planets on the left, behind a hexagon gate | the outside world (your model, MCP tools, people chatting in) behind **agentgateway** |
@@ -114,7 +114,7 @@ Without Docker, run `make dev`.
 | Key | Action |
 |-----|--------|
 | `N` | start the guided tour / next chapter (`Esc` ends it) |
-| `Y` / `X` | approve / reject the tool call a frozen scout's pilot is holding up |
+| `Y` / `X` | approve / reject the tool call a frozen UFO's pilot is holding up |
 | `T` | send a wave of chats now |
 | `A` | toggle automatic waves |
 | `D` | create three small demo agents (only if the namespace has no ready agents) |

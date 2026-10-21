@@ -34,11 +34,15 @@ test('schedule after a quiet spell is not penalised by an old gap', () => {
   assert.equal(schedule(q, { seq: 2 }, 60000), 60000 + DELAY_MS);
 });
 
-test('scout ships come in four designs, each actor always the same one', async () => {
+test('scouts are round UFOs in four styles, each actor always the same one', async () => {
   const { scoutKind, scoutOutline } = await import('./show.mjs');
   const uids = Array.from({ length: 60 }, (_, i) => `uid-${i}-${i * 7919}`);
   const kinds = new Set(uids.map(scoutKind));
-  assert.deepEqual([...kinds].sort(), ['crab', 'dart', 'orb', 'saucer']);
+  assert.deepEqual([...kinds].sort(), ['disc', 'ringed', 'spiked', 'twin']);
+  for (const k of kinds) {
+    const r = scoutOutline(k).map(([x, y]) => Math.hypot(x, y));
+    assert.ok(Math.max(...r) - Math.min(...r) < 0.01, `${k} hull should be a circle`);
+  }
   for (const u of uids.slice(0, 12)) {
     assert.equal(scoutKind(u), scoutKind(u));
     const pts = scoutOutline(scoutKind(u));

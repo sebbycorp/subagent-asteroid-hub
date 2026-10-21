@@ -53,27 +53,21 @@ function seeded(str) {
   };
 }
 
-const SCOUT_KINDS = ['saucer', 'dart', 'crab', 'orb'];
+const SCOUT_KINDS = ['disc', 'ringed', 'spiked', 'twin'];
 
-// scoutKind picks the alien scout design for an actor, always the same one,
-// so a resumed ship is recognisably the ship that froze.
+// scoutKind picks the UFO style for an actor, always the same one, so a
+// resumed UFO is recognisably the one that froze.
 export function scoutKind(uid) {
   return SCOUT_KINDS[Math.floor(seeded(`kind:${uid}`)() * SCOUT_KINDS.length)];
 }
 
-// scoutOutline is the hull of a scout design, facing +x: what breaks apart
+// scoutOutline is a UFO's round hull (seen from above): what breaks apart
 // when Substrate freezes it.
-export function scoutOutline(kind) {
-  const ring = (rx, ry, n) => Array.from({ length: n }, (_, i) => {
-    const a = (i / n) * Math.PI * 2;
-    return [Math.cos(a) * rx, Math.sin(a) * ry];
+export function scoutOutline() {
+  return Array.from({ length: 14 }, (_, i) => {
+    const a = (i / 14) * Math.PI * 2;
+    return [Math.cos(a) * 14, Math.sin(a) * 14];
   });
-  switch (kind) {
-    case 'saucer': return ring(16, 7, 12);
-    case 'dart': return [[17, 0], [-6, -8], [-11, -12], [-8, 0], [-11, 12], [-6, 8]];
-    case 'crab': return [[10, -8], [10, -3], [14, -3], [14, 3], [10, 3], [10, 8], [-4, 8], [-4, 12], [-10, 12], [-10, -12], [-4, -12], [-4, -8]];
-    default: return ring(10, 10, 10); // orb
-  }
 }
 
 export function aimAngle(ship, target) {

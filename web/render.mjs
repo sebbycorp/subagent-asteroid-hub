@@ -162,8 +162,8 @@ function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
 
 export const ALIEN = '#9dff6b'; // the pilot who asks a human for approval
 
-// drawScout draws a session's sandbox as a little alien scout ship, facing
-// where it flies, in one of four designs; it powers up (grows) while working.
+// drawScout draws a session's sandbox as a little round UFO (seen from above,
+// spinning) in one of four styles; it powers up (grows) while working.
 // A frozen scout (waiting for a human) is grey and dashed, with its pilot out
 // on the hull holding up the request.
 function drawScout(ctx, r, now, approval) {
@@ -175,48 +175,51 @@ function drawScout(ctx, r, now, approval) {
   ctx.scale(sc, sc);
   const lw = 1.5 / sc;
   if (r.frozen) ctx.setLineDash([3 / sc, 3 / sc]);
-  // engine flame (not when frozen)
-  if (!r.frozen && !r.dying) {
-    const f = 5 + Math.random() * 7;
-    ctx.beginPath();
-    ctx.moveTo(-11, -2.5); ctx.lineTo(-11 - f, 0); ctx.lineTo(-11, 2.5);
-    stroke(ctx, RESUMED, 1.1 / sc);
-  }
+  // a round UFO seen from above: hull, dome, and a style of its own
+  const lit = (i, n) => !r.frozen && (Math.floor(now / 120) + i) % n === 0;
   ctx.beginPath();
-  switch (r.kind) {
-    case 'saucer':
-      ctx.ellipse(0, 0, 16, 7, 0, 0, Math.PI * 2);
-      ctx.moveTo(-7, -3); ctx.ellipse(1, -3, 8, 7, 0, Math.PI, 0);
-      stroke(ctx, color, lw);
-      for (const [lx, ly, ph] of [[-9, 1, 0], [0, 3.5, 1], [9, 1, 2]]) {
-        ctx.beginPath();
-        ctx.arc(lx, ly, 1.3, 0, Math.PI * 2);
-        ctx.fillStyle = (Math.floor(now / 250) + ph) % 3 && !r.frozen ? color : DIM;
-        ctx.fill();
-      }
-      break;
-    case 'dart':
-      poly(ctx, [[17, 0], [-6, -8], [-11, -12], [-8, 0], [-11, 12], [-6, 8]], 0, 0);
-      ctx.moveTo(4, -3); ctx.lineTo(10, 0); ctx.lineTo(4, 3);
-      ctx.moveTo(-6, -8); ctx.lineTo(-2, 0); ctx.lineTo(-6, 8);
-      stroke(ctx, color, lw);
-      break;
-    case 'crab':
-      poly(ctx, [[10, -8], [10, -3], [14, -3], [14, 3], [10, 3], [10, 8], [-4, 8], [-4, 12], [-10, 12], [-10, -12], [-4, -12], [-4, -8]], 0, 0);
-      stroke(ctx, color, lw);
-      for (const ey of [-4, 4]) { ctx.beginPath(); ctx.rect(3, ey - 1.5, 3, 3); ctx.fillStyle = color; ctx.fill(); }
-      break;
-    default: // orb
-      ctx.arc(0, 0, 10, 0, Math.PI * 2);
-      ctx.moveTo(5, 0); ctx.arc(0, 0, 5, 0, Math.PI * 2);
-      for (const a of [0.8, 2.35, 3.9, 5.5]) {
-        ctx.moveTo(Math.cos(a) * 10, Math.sin(a) * 10);
-        ctx.lineTo(Math.cos(a) * 15, Math.sin(a) * 15);
-      }
-      stroke(ctx, color, lw);
-      for (const a of [0.8, 2.35, 3.9, 5.5]) {
-        ctx.beginPath(); ctx.arc(Math.cos(a) * 15.5, Math.sin(a) * 15.5, 1.4, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
-      }
+  ctx.arc(0, 0, 14, 0, Math.PI * 2);
+  stroke(ctx, color, lw);
+  ctx.beginPath();
+  ctx.arc(0, 0, 5.5, 0, Math.PI * 2); // the dome
+  stroke(ctx, color, lw);
+  ctx.beginPath();
+  ctx.arc(-1.8, -1.8, 2.2, Math.PI, Math.PI * 1.5); // a glint on the dome
+  stroke(ctx, DIM, 0.8 / sc);
+  if (r.kind === 'disc') {
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * 10, Math.sin(a) * 10, lit(i, 3) ? 1.6 : 1, 0, Math.PI * 2);
+      ctx.fillStyle = lit(i, 3) ? color : DIM;
+      ctx.fill();
+    }
+  } else if (r.kind === 'ringed') {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 21, 6, 0.4, 0, Math.PI * 2); // an orbiting band
+    stroke(ctx, color, lw * 0.8);
+    ctx.beginPath();
+    ctx.arc(0, 0, 9.5, 0, Math.PI * 2);
+    stroke(ctx, DIM, lw * 0.7);
+  } else if (r.kind === 'spiked') {
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      ctx.moveTo(Math.cos(a) * 14, Math.sin(a) * 14);
+      ctx.lineTo(Math.cos(a) * 19, Math.sin(a) * 19);
+    }
+    stroke(ctx, color, lw);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      ctx.beginPath(); ctx.arc(Math.cos(a) * 19.5, Math.sin(a) * 19.5, 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = lit(i, 2) ? color : DIM; ctx.fill();
+    }
+  } else { // twin
+    ctx.setLineDash([2 / sc, 2.5 / sc]);
+    ctx.beginPath(); ctx.arc(0, 0, 10.5, 0, Math.PI * 2); stroke(ctx, color, lw * 0.8);
+    ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); stroke(ctx, DIM, lw * 0.7);
+    if (!r.frozen) ctx.setLineDash([]); else ctx.setLineDash([3 / sc, 3 / sc]);
+    ctx.beginPath(); ctx.arc(0, 0, 1.8, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
   }
   ctx.restore();
   ctx.setLineDash([]);

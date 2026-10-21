@@ -79,7 +79,7 @@ function spawnRock(uid, info, from) {
     y: from ? from.y + 30 : F.y0 + Math.random() * (F.y1 - F.y0),
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
-    rot: angle,
+    rot: Math.random() * Math.PI * 2,
     kind: scoutKind(uid),
     shape: scoutOutline(scoutKind(uid)),
     agent: info.agent || 'agent',
@@ -524,7 +524,7 @@ function frame(now) {
   for (const r of world.rocks.values()) {
     r.x += r.vx * dt;
     r.y += r.vy * dt;
-    if (r.vx || r.vy) r.rot = Math.atan2(r.vy, r.vx); // scouts face where they fly
+    if (!r.frozen) r.rot += dt * (r.runSince ? 1.8 : 0.6); // UFOs spin; frozen ones stop
     if (r.runSince && !r.dying && !r.frozen) r.scale = growScale(now - r.runSince);
     const w = F.x1 - F.x0, h = F.y1 - F.y0;
     if (r.x < F.x0) {
