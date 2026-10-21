@@ -236,3 +236,23 @@ export function attribute(ev, rocks) {
   }
   return live.length === 1 ? live[0] : null;
 }
+
+// growScale is how big a running asteroid has grown: its sandbox is using
+// compute and memory while it works. +25% a second, capped at 2x.
+export function growScale(runningMs) {
+  return Math.min(2, 1 + Math.max(0, runningMs) / 4000);
+}
+
+// fxDuration is how long a gateway call's animation plays: slower real calls
+// play longer, so a 54 ms tool call and a 2 s model call look different.
+export function fxDuration(realMs) {
+  return Math.round(Math.min(3200, 1100 + Math.max(0, realMs) * 0.6));
+}
+
+// fxLabel is the caption that rides along with a gateway call.
+export function fxLabel(ev) {
+  const d = dur(ev.durationMs);
+  if (ev.kind === 'chat') return `A2A CHAT IN · ${d}`;
+  if (ev.kind === 'tool') return `${String(ev.tool).toUpperCase()} · ${d}`;
+  return `${String(ev.model || ev.target).toUpperCase()} · ${d}${ev.tokens ? ` · ${ev.tokens} TOK` : ''}`;
+}

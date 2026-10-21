@@ -4,9 +4,9 @@
 import {
   newQueue, schedule, due, pending, nextSuspend, rockShape, aimAngle, wrapLines, settled,
   newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
-  logLine, planetFor, attribute, DELAY_MS,
+  logLine, planetFor, attribute, growScale, fxDuration, fxLabel, DELAY_MS,
 } from './show.mjs';
-import { setup, draw, saucerSpots, vaultSlot, activeField, FX_MS, NEW, RESUMED, GW } from './render.mjs';
+import { setup, draw, saucerSpots, vaultSlot, activeField, NEW, RESUMED, GW } from './render.mjs';
 
 const ACTIVE = new Set(['resuming', 'running', 'suspending']);
 const canvas = document.getElementById('stage');
@@ -94,9 +94,10 @@ function vaultPos() {
 }
 
 function explode(r, now) {
+  const sc = r.scale || 1;
   for (let i = 0; i < r.shape.length; i++) {
-    const [ax, ay] = r.shape[i];
-    const [bx, by] = r.shape[(i + 1) % r.shape.length];
+    const [ax, ay] = r.shape[i].map((v) => v * sc);
+    const [bx, by] = r.shape[(i + 1) % r.shape.length].map((v) => v * sc);
     const a = Math.atan2(by - ay, bx - ax);
     const out = Math.atan2(ay + by, ax + bx);
     world.fragments.push({
@@ -178,6 +179,7 @@ function show(ev, now) {
       }
       r.worker = ev.worker;
       r.sub = subLabel({ ...info, state: 'running' });
+      r.runSince = now; // it grows while it works
       break;
     }
     case 'suspend': {
@@ -255,9 +257,13 @@ function showGateway(ev, now) {
   const planet = planetFor(ev);
   if (ev.kind === 'llm') world.modelLabel = planet.label;
   const rock = ev.direction === 'egress' ? attribute(ev, [...world.rocks.values()]) : null;
-  const label = ev.kind === 'chat' ? 'A2A CHAT IN' : ev.kind === 'tool' ? `TOOL ${String(ev.tool).toUpperCase()}` : planet.label;
   const to = ev.kind === 'chat' ? saucerFor((pools()[0] || {}).name) : null;
-  world.gwFx.push({ rock, planet: planet.key, label, born: now, ingress: ev.direction === 'ingress', to: to && { x: to.x, y: to.y + 20 } });
+  // labels for the same planet stack instead of overlapping
+  const slot = world.gwFx.filter((f) => f.planet === planet.key).length % 4;
+  world.gwFx.push({
+    rock, planet: planet.key, kind: ev.kind, label: fxLabel(ev), slot, born: now, dur: fxDuration(ev.durationMs),
+    ingress: ev.direction === 'ingress', to: to && { x: to.x, y: to.y + 20 },
+  });
   world.gateFlash = now;
   logPush({ src: 'gateway', ...ev, agent: ev.agent || rock?.agent }, GW);
   if (world.tour?.kind === 'gateway' && (ev.agent || rock?.agent) === tourAgent()) {
@@ -309,6 +315,7 @@ function reconcile() {
       r.agent = a.agent;
       r.worker = a.worker;
       r.sub = subLabel(a);
+      if (a.state === 'running' && !r.runSince) r.runSince = performance.now();
     } else if (want === 'vault') {
       world.rocks.delete(uid);
       world.vault.add(uid);
@@ -436,7 +443,7 @@ function frame(now) {
   last = now;
   for (const ev of due(queue, now)) show(ev, now);
   while (world.gwPending.length && world.gwPending[0].at <= now) showGateway(world.gwPending.shift().ev, now);
-  world.gwFx = world.gwFx.filter((fx) => now - fx.born < FX_MS);
+  world.gwFx = world.gwFx.filter((fx) => now - fx.born < fx.dur);
   world.captionLines = wrapLines(currentCaption(captions, now) ?? world.idleCaption, 96);
 
   const F = activeField(!!world.tour);
@@ -444,6 +451,7 @@ function frame(now) {
     r.x += r.vx * dt;
     r.y += r.vy * dt;
     r.rot += r.spin * dt;
+    if (r.runSince && !r.dying) r.scale = growScale(now - r.runSince);
     const w = F.x1 - F.x0, h = F.y1 - F.y0;
     if (r.x < F.x0) {
       if (world.tour) {

@@ -106,13 +106,14 @@ function drawSaucer(ctx, s, busyWorkers) {
 }
 
 function drawRock(ctx, r) {
-  poly(ctx, r.shape, r.x, r.y, r.rot);
+  const sc = r.scale || 1;
+  poly(ctx, r.shape, r.x, r.y, r.rot, sc);
   stroke(ctx, r.failed ? RED : originColor(r));
   // dashed leader to the label
-  const lx = r.x + 34, ly = r.y - 22;
+  const lx = r.x + 34 * sc, ly = r.y - 22 * sc;
   ctx.setLineDash([2, 3]);
   ctx.beginPath();
-  ctx.moveTo(r.x + 20, r.y - 10);
+  ctx.moveTo(r.x + 20 * sc, r.y - 10 * sc);
   ctx.lineTo(lx - 4, ly + 4);
   stroke(ctx, DIM, 1);
   ctx.setLineDash([]);
@@ -442,37 +443,113 @@ function along(pts, k) {
   return pts[pts.length - 1];
 }
 
-export const FX_MS = 1800;
+function dotAt(ctx, pt, r, color) {
+  ctx.beginPath();
+  ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
 
+// gateCell lights the hexagon where a call crosses the gateway.
+function gateCell(ctx, y, a) {
+  const cy = GATE.y0 + Math.round((Math.max(GATE.y0, Math.min(GATE.y1, y)) - GATE.y0) / 18) * 18;
+  hexagon(ctx, GATE.x, cy, 7);
+  ctx.globalAlpha *= a;
+  ctx.fillStyle = GW;
+  ctx.fill();
+}
+
+// lightning draws a crackling bolt along a path (fresh jitter every frame).
+function lightning(ctx, pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const n = Math.max(3, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 22));
+    for (let j = 1; j <= n; j++) {
+      const f = j / n, jit = j === n ? 0 : (Math.random() - 0.5) * 14;
+      const nx = -(b.y - a.y), ny = b.x - a.x, len = Math.hypot(nx, ny) || 1;
+      ctx.lineTo(a.x + (b.x - a.x) * f + (nx / len) * jit, a.y + (b.y - a.y) * f + (ny / len) * jit);
+    }
+  }
+  stroke(ctx, GW, 1.6);
+}
+
+function planetPulse(ctx, p, k) {
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.r + 4 + k * 22, 0, Math.PI * 2);
+  ctx.globalAlpha *= 1 - k;
+  stroke(ctx, GW, 1.6);
+}
+
+// drawGatewayFx animates each request agentgateway handled, by kind:
+//  model call: a packet train out, the planet pulses, a longer train back
+//  tool call:  a crackling bolt out, a result box back
+//  chat in:    a comet from CHATS IN through the gate to the pool
 function drawGatewayFx(ctx, world, now) {
-  const prev = ctx.globalAlpha;
+  const base = ctx.globalAlpha;
   for (const fx of world.gwFx || []) {
-    const k = (now - fx.born) / FX_MS;
+    const k = (now - fx.born) / fx.dur;
     if (k < 0 || k > 1) continue;
-    const fade = 1 - Math.max(0, (k - 0.7) / 0.3);
+    const fade = 1 - Math.max(0, (k - 0.8) / 0.2);
     const pts = fxPath(fx);
-    ctx.globalAlpha = prev * fade * 0.8;
-    ctx.setLineDash([3, 5]);
+    const back = [...pts].reverse();
+    const p = PLANETS[fx.planet];
+    ctx.save();
+    // faint guide line
+    ctx.globalAlpha = base * fade * 0.22;
+    ctx.setLineDash([2, 6]);
     ctx.beginPath();
     pts.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
-    stroke(ctx, GW, 1.2);
+    stroke(ctx, GW, 1);
     ctx.setLineDash([]);
-    // the request travels out and the response comes back
-    const there = k < 0.5 ? k / 0.5 : 1 - (k - 0.5) / 0.5;
-    const dot = along(pts, there);
-    ctx.globalAlpha = prev * fade;
-    ctx.beginPath();
-    ctx.arc(dot.x, dot.y, 3, 0, Math.PI * 2);
-    ctx.fillStyle = GW;
-    ctx.fill();
+    ctx.globalAlpha = base * fade;
+    if (fx.kind === 'llm') {
+      if (k < 0.45) {
+        for (let i = 0; i < 5; i++) {
+          const t = k / 0.45 - i * 0.06;
+          if (t > 0 && t < 1) dotAt(ctx, along(pts, t), 2.6, GW);
+        }
+      }
+      if (k > 0.4 && k < 0.7) { ctx.save(); planetPulse(ctx, p, (k - 0.4) / 0.3); ctx.restore(); }
+      if (k > 0.55) {
+        for (let i = 0; i < 9; i++) {
+          const t = (k - 0.55) / 0.45 - i * 0.045;
+          if (t > 0 && t < 1) dotAt(ctx, along(back, t), 1.8, INK);
+        }
+      }
+    } else if (fx.kind === 'tool') {
+      if (k < 0.35 && Math.floor(now / 60) % 3 !== 0) lightning(ctx, pts);
+      if (k > 0.3 && k < 0.55) { ctx.save(); planetPulse(ctx, p, (k - 0.3) / 0.25); ctx.restore(); }
+      if (k > 0.45) {
+        const b = along(back, Math.min(1, (k - 0.45) / 0.45));
+        ctx.beginPath();
+        ctx.rect(b.x - 4, b.y - 4, 8, 8);
+        stroke(ctx, GW, 1.4);
+      }
+    } else {
+      const head = Math.min(1, k / 0.75);
+      for (let i = 12; i >= 0; i--) {
+        const t = head - i * 0.018;
+        if (t <= 0) continue;
+        ctx.globalAlpha = base * fade * (1 - i / 13);
+        dotAt(ctx, along(pts, t), i === 0 ? 3.4 : 2.2 - i * 0.12, i === 0 ? INK : GW);
+      }
+      ctx.globalAlpha = base * fade;
+    }
+    // the gate cell this call crossed
+    ctx.save();
+    ctx.globalAlpha = base * fade * (1 - k) * 0.9;
+    gateCell(ctx, pts[1].y, 1);
+    ctx.restore();
     // the shield: the call left this sandbox only through the gateway
-    if (fx.rock) {
-      const r = 34 + Math.sin(k * Math.PI * 6) * 2;
-      hexagon(ctx, fx.rock.x, fx.rock.y, r);
+    if (fx.rock && !fx.ingress) {
+      const sc = fx.rock.scale || 1;
+      hexagon(ctx, fx.rock.x, fx.rock.y, 34 * sc + Math.sin(k * Math.PI * 6) * 2);
       stroke(ctx, GW, 1.8);
     }
-    const mid = pts[1];
-    text(ctx, fx.label, mid.x + 10, mid.y - 8, { size: 8, spacing: 1, color: GW });
+    text(ctx, fx.label, GATE.x + 14, p.y - p.r + 4 + (fx.slot || 0) * 11, { size: 8, spacing: 1, color: GW });
+    ctx.restore();
   }
-  ctx.globalAlpha = prev;
+  ctx.globalAlpha = base;
 }

@@ -157,3 +157,26 @@ test('a call the backend pinned to an actor goes to that actor\'s rock', async (
   const a = { uid: 'u1', agent: 'poet', born: 1 }, b = { uid: 'u2', agent: 'poet', born: 2 };
   assert.equal(attribute({ agent: 'poet', actorUid: 'u1' }, [a, b]), a);
 });
+
+test('a running asteroid grows slowly, up to twice its size', async () => {
+  const { growScale } = await import('./show.mjs');
+  assert.equal(growScale(0), 1);
+  assert.ok(growScale(1000) > 1.1 && growScale(1000) < 1.4, `1s → ${growScale(1000)}`);
+  assert.ok(growScale(2000) > growScale(1000));
+  assert.equal(growScale(60000), 2);
+  assert.equal(growScale(-5), 1);
+});
+
+test('call animations last longer for slower real calls, within bounds', async () => {
+  const { fxDuration } = await import('./show.mjs');
+  assert.equal(fxDuration(0), 1100);
+  assert.ok(fxDuration(1800) > fxDuration(54));
+  assert.equal(fxDuration(120000), 3200);
+});
+
+test('call labels say what crossed the gateway', async () => {
+  const { fxLabel } = await import('./show.mjs');
+  assert.equal(fxLabel({ kind: 'llm', model: 'qwen3:8b', durationMs: 1775, tokens: 608 }), 'QWEN3:8B · 1.8S · 608 TOK');
+  assert.equal(fxLabel({ kind: 'tool', tool: 'k8s_get_resources', durationMs: 54 }), 'K8S_GET_RESOURCES · 54MS');
+  assert.equal(fxLabel({ kind: 'chat', durationMs: 2700 }), 'A2A CHAT IN · 2.7S');
+});
