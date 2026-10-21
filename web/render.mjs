@@ -187,7 +187,8 @@ function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
   text(ctx, `KAGENT WORKER POOL · ${workers.length} WORKER${workers.length === 1 ? '' : 'S'}`, x, y + 54, { size: 7, align: 'center', color: DIM, spacing: 1 });
 }
 
-export const ALIEN = '#9dff6b'; // the pilot who asks a human for approval
+export const ALIEN = '#9dff6b'; // the human-in-the-loop request
+const KAGENT_PURPLE = '#9b4dff'; // the kagent robot pilot
 
 // drawScout draws a session's sandbox as a little round UFO (seen from above,
 // spinning) in one of four styles; it powers up (grows) while working.
@@ -261,34 +262,38 @@ function drawScout(ctx, r, now, approval) {
   text(ctx, r.agent, lx, ly, { size: 10, spacing: 1 });
   text(ctx, r.sub, lx, ly + 13, { size: 9, spacing: 1, color: r.frozen ? ALIEN : DIM });
   if (r.tag) text(ctx, r.tag, lx, ly + 25, { size: 8, spacing: 1, color: originColor(r) });
-  if (r.frozen && approval) drawPilot(ctx, r.x, r.y - 18 * sc, now, approval);
+  if (r.frozen && approval) drawPilot(ctx, r.x, r.y - 26 * sc, now, approval);
 }
 
-// drawPilot draws the little alien who climbs out of a frozen scout and
-// holds up the tool call it wants a human to approve.
+// drawPilot draws the little kagent alien (kagent's robot mark with antennae
+// and legs) who climbs out of a frozen UFO and holds up the tool call it
+// wants a human to approve.
 function drawPilot(ctx, x, y, now, ap) {
   const bob = Math.sin(now / 300) * 1.5;
   y += bob;
-  // body, legs
+  const S = 28; // the kagent robot, head and body in one
+  // legs
   ctx.beginPath();
-  ctx.moveTo(x - 4, y); ctx.lineTo(x - 5, y + 9); ctx.lineTo(x + 5, y + 9); ctx.lineTo(x + 4, y);
-  ctx.moveTo(x - 3, y + 9); ctx.lineTo(x - 4, y + 13); ctx.moveTo(x + 3, y + 9); ctx.lineTo(x + 4, y + 13);
-  stroke(ctx, ALIEN, 1.4);
-  // head with big eyes and antennae
+  ctx.moveTo(x - 4, y + S / 2 - 2); ctx.lineTo(x - 5, y + S / 2 + 4);
+  ctx.moveTo(x + 4, y + S / 2 - 2); ctx.lineTo(x + 5, y + S / 2 + 4);
+  stroke(ctx, KAGENT_PURPLE, 1.4);
+  // antennae
   ctx.beginPath();
-  ctx.ellipse(x, y - 6, 7, 6, 0, 0, Math.PI * 2);
-  stroke(ctx, ALIEN, 1.4);
-  for (const ex of [-3, 3]) { ctx.beginPath(); ctx.ellipse(x + ex, y - 6, 1.8, 2.6, ex * 0.1, 0, Math.PI * 2); ctx.fillStyle = ALIEN; ctx.fill(); }
-  ctx.beginPath();
-  ctx.moveTo(x - 3, y - 11); ctx.lineTo(x - 6, y - 17); ctx.moveTo(x + 3, y - 11); ctx.lineTo(x + 6, y - 17);
-  stroke(ctx, ALIEN, 1.2);
-  for (const ax of [-6, 6]) { ctx.beginPath(); ctx.arc(x + ax, y - 17.5, 1.5, 0, Math.PI * 2); ctx.fillStyle = ALIEN; ctx.fill(); }
+  ctx.moveTo(x - 4, y - S / 2 + 3); ctx.lineTo(x - 7, y - S / 2 - 4);
+  ctx.moveTo(x + 4, y - S / 2 + 3); ctx.lineTo(x + 7, y - S / 2 - 4);
+  stroke(ctx, KAGENT_PURPLE, 1.2);
+  for (const ax of [-7, 7]) {
+    ctx.beginPath(); ctx.arc(x + ax, y - S / 2 - 4.5, 1.6, 0, Math.PI * 2);
+    ctx.fillStyle = Math.floor(now / 400) % 2 ? ALIEN : KAGENT_PURPLE; ctx.fill();
+  }
+  if (KAGENT.complete && KAGENT.naturalWidth) ctx.drawImage(KAGENT, x - S / 2, y - S / 2, S, S);
+  else { ctx.beginPath(); ctx.rect(x - 7, y - 6, 14, 12); stroke(ctx, KAGENT_PURPLE, 1.4); }
   // waving arm up to the sign
   const wave = Math.sin(now / 180) * 0.25;
-  const hx = x + 12 + Math.cos(-1 + wave) * 2, hy = y - 14 + Math.sin(-1 + wave) * 2;
+  const hx = x + 18 + Math.cos(-1 + wave) * 2, hy = y - 18 + Math.sin(-1 + wave) * 2;
   ctx.beginPath();
-  ctx.moveTo(x + 4, y + 2); ctx.lineTo(hx, hy);
-  stroke(ctx, ALIEN, 1.3);
+  ctx.moveTo(x + 12, y + 1); ctx.lineTo(hx, hy);
+  stroke(ctx, KAGENT_PURPLE, 1.3);
   // the sign: what it wants to run, and how to answer
   const tool = (ap.tools?.[0]?.name || 'A TOOL').toUpperCase();
   const lines = [`RUN ${tool}?`, 'Y APPROVE · X REJECT'];
