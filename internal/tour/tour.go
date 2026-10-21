@@ -47,7 +47,9 @@ type Status struct {
 type Options struct {
 	OnChange func(Status)
 	OnActive func(active bool) // e.g. pause auto waves during the tour
-	Now      func() time.Time
+	// OnApproval receives a turn that paused for a human (the HITL chapter).
+	OnApproval func(sessionID, agent string, ap *traffic.Approval)
+	Now        func() time.Time
 }
 
 var ErrBusy = errors.New("the tour is still running this chapter")
@@ -58,6 +60,11 @@ const (
 	ask      = "What was the code word? Reply with just the word."
 
 	gatewayQuestion = "How many pods are running in the kagent namespace? Use your Kubernetes tools, then answer in one short sentence."
+	hitlQuestion    = "How many pods are running in the kagent namespace?"
+
+	// HITLAgent needs a person's approval before any tool call
+	// (deploy/agentgateway/40-agents.yaml).
+	HITLAgent = "asteroids-demo-ops"
 )
 
 type chapter struct {
@@ -98,6 +105,12 @@ var chapters = []chapter{
 		"THROUGH AGENTGATEWAY: SUBSTRATE ONLY LETS IT REACH THE",
 		"GATEWAY, AND THE GATEWAY HOLDS THE CREDENTIALS. WATCH THE SHIELD.",
 	}, (*Tour).runGateway},
+	{"hitl", "HUMAN IN THE LOOP: IT WAITS FOR YOU", []string{
+		"WE ASK OPS, AN AGENT THAT NEEDS A PERSON'S OK BEFORE ANY TOOL CALL.",
+		"IT ASKS TO RUN A TOOL AND PAUSES. SUBSTRATE FREEZES IT WHILE IT",
+		"WAITS: 0 CPU, WORKER FREED, FOR SECONDS OR DAYS. ITS PILOT HOLDS",
+		"UP THE REQUEST. PRESS Y TO APPROVE OR X TO REJECT.",
+	}, (*Tour).runHITL},
 	{"density", "DENSITY: MANY AGENTS, FEW MACHINES", []string{
 		"NOW A WAVE OF CHATS ACROSS EVERY AGENT.",
 		"A SESSION HOLDS A WORKER ONLY WHILE IT IS THINKING;",
@@ -119,6 +132,7 @@ type Tour struct {
 	session  string // the tour's main session
 	lastTask string // its latest turn, the checkpoint head
 	fork     string
+	hitl     string // the HITL chapter's session, while it waits for a person
 }
 
 // New creates an inactive tour.
@@ -155,7 +169,7 @@ func (t *Tour) Start(ctx context.Context) error {
 		return ErrBusy
 	}
 	wasActive := t.st.Active
-	t.session, t.lastTask, t.fork = "", "", ""
+	t.session, t.lastTask, t.fork, t.hitl = "", "", "", ""
 	t.mu.Unlock()
 	if !wasActive && t.o.OnActive != nil {
 		t.o.OnActive(true)
@@ -238,7 +252,10 @@ func (t *Tour) enter(ctx context.Context, i int) error {
 			if s.Chapter != i+1 || !s.Active {
 				return // moved on or stopped meanwhile
 			}
-			s.Busy, s.Doing = false, ""
+			s.Busy = false
+			if !(s.Kind == "hitl" && t.hitlWaiting()) {
+				s.Doing = ""
+			}
 			if err != nil {
 				s.Error = strings.ToUpper(err.Error())
 			}
@@ -257,11 +274,73 @@ func (t *Tour) client() Client {
 	return t.c
 }
 
-func (t *Tour) chat(ctx context.Context, id, text string) (traffic.ChatResult, error) {
+func (t *Tour) chat(ctx context.Context, id, text, agent string) (traffic.ChatResult, error) {
 	t.m.MarkSent(id, t.o.Now())
 	res, err := t.client().Chat(ctx, id, text)
+	if err == nil && res.Approval != nil && t.o.OnApproval != nil {
+		t.o.OnApproval(id, agent, res.Approval) // before the turn ends
+	}
 	t.m.MarkTurnEnded(id, t.o.Now())
 	return res, err
+}
+
+// hitlWaiting reports whether the HITL chapter is waiting for a person.
+// Callers must not hold t.mu… except enter's update, which runs under it.
+func (t *Tour) hitlWaiting() bool { return t.hitl != "" }
+
+func (t *Tour) runHITL(ctx context.Context) error {
+	c := t.client()
+	agents, err := c.ListReadyAgents(ctx)
+	if err != nil {
+		return err
+	}
+	var ops *traffic.AgentRef
+	for i := range agents {
+		if agents[i].Name == HITLAgent {
+			ops = &agents[i]
+		}
+	}
+	if ops == nil {
+		return errors.New("no human-in-the-loop agent: apply " + HITLAgent + " (deploy/agentgateway)")
+	}
+	t.doing("ASKING OPS: \"HOW MANY PODS RUN IN THE KAGENT NAMESPACE?\"")
+	id, err := c.CreateSession(ctx, *ops, fmt.Sprintf("asteroids-tour-hitl-%d", t.o.Now().UnixMilli()%1_000_000))
+	if err != nil {
+		return err
+	}
+	t.update(func(s *Status) { s.Focus = []string{id} })
+	res, err := t.chat(ctx, id, hitlQuestion, ops.Name)
+	if err != nil {
+		return err
+	}
+	if res.Approval == nil {
+		t.update(func(s *Status) { s.Result = "IT ANSWERED WITHOUT A TOOL: " + quote(res.Reply) })
+		return nil
+	}
+	tool := strings.ToUpper(res.Approval.Tools[0].Name)
+	t.update(func(s *Status) {
+		t.hitl = id
+		s.Doing = "WAITING FOR YOU · PRESS Y TO APPROVE, X TO REJECT " + tool
+	})
+	return nil
+}
+
+// Resolved reports a person's decision on a paused turn and how it ended.
+func (t *Tour) Resolved(sessionID string, approved bool, res traffic.ChatResult, err error) {
+	t.update(func(s *Status) {
+		if !s.Active || s.Kind != "hitl" || t.hitl != sessionID {
+			return
+		}
+		t.hitl, s.Doing = "", ""
+		switch {
+		case err != nil:
+			s.Error = strings.ToUpper(err.Error())
+		case approved:
+			s.Result = "APPROVED. IT ANSWERED: " + quote(res.Reply)
+		default:
+			s.Result = "REJECTED. IT REPLIED: " + quote(res.Reply)
+		}
+	})
 }
 
 func quote(reply string) string {
@@ -281,7 +360,16 @@ func (t *Tour) runCreate(ctx context.Context) error {
 	if len(agents) == 0 {
 		return errors.New("no ready agents. press d to create demo agents, then n")
 	}
-	a := agents[0]
+	var a traffic.AgentRef
+	for _, ag := range agents {
+		if ag.Name != HITLAgent { // ops always waits for a person: not for chapter 1
+			a = ag
+			break
+		}
+	}
+	if a.Name == "" {
+		return errors.New("no ready agents. press d to create demo agents, then n")
+	}
 	t.doing("CREATING A SESSION ON " + strings.ToUpper(a.Name) + "…")
 	id, err := c.CreateSession(ctx, a, fmt.Sprintf("asteroids-tour-%d", t.o.Now().UnixMilli()%1_000_000))
 	if err != nil {
@@ -291,7 +379,7 @@ func (t *Tour) runCreate(ctx context.Context) error {
 	t.session = id
 	t.mu.Unlock()
 	t.update(func(s *Status) { s.Focus = []string{id}; s.Doing = `SENDING: "REMEMBER: THE CODE WORD IS ORION."` })
-	res, err := t.chat(ctx, id, teach)
+	res, err := t.chat(ctx, id, teach, a.Name)
 	if err != nil {
 		return err
 	}
@@ -317,7 +405,7 @@ func (t *Tour) runResume(ctx context.Context) error {
 		return err
 	}
 	t.doing(`ASKING: "WHAT WAS THE CODE WORD?"`)
-	res, err := t.chat(ctx, id, ask)
+	res, err := t.chat(ctx, id, ask, "")
 	if err != nil {
 		return err
 	}
@@ -355,7 +443,7 @@ func (t *Tour) runFork(ctx context.Context) error {
 	t.fork = fork
 	t.mu.Unlock()
 	t.update(func(s *Status) { s.Focus = []string{id, fork}; s.Doing = `ASKING THE FORK: "WHAT WAS THE CODE WORD?"` })
-	res, err := t.chat(ctx, fork, ask)
+	res, err := t.chat(ctx, fork, ask, "")
 	if err != nil {
 		return err
 	}
@@ -373,7 +461,7 @@ func (t *Tour) runGateway(ctx context.Context) error {
 		return err
 	}
 	t.doing(`ASKING: "HOW MANY PODS RUN IN THE KAGENT NAMESPACE?"`)
-	res, err := t.chat(ctx, id, gatewayQuestion)
+	res, err := t.chat(ctx, id, gatewayQuestion, "")
 	if err != nil {
 		return err
 	}

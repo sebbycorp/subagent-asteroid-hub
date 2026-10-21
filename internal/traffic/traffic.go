@@ -39,6 +39,10 @@ type Options struct {
 	Now           func() time.Time
 	// OnStatus, if set, is called whenever auto, in-flight or the note changes.
 	OnStatus func(auto bool, inFlight int, note string)
+	// OnApproval, if set, receives a turn that paused for a human (before the
+	// turn is marked ended, so the screen freezes the agent rather than
+	// showing an ordinary suspend).
+	OnApproval func(sessionID, agent string, ap *Approval)
 }
 
 var (
@@ -328,7 +332,16 @@ func (g *Generator) pickSession(ctx context.Context, c Client, a AgentRef, picke
 func (g *Generator) chat(ctx context.Context, c Client, id, text string) {
 	defer g.wg.Done()
 	g.m.MarkSent(id, g.o.Now())
-	_, err := c.Chat(ctx, id, text)
+	res, err := c.Chat(ctx, id, text)
+	if err == nil && res.Approval != nil && g.o.OnApproval != nil {
+		g.mu.Lock()
+		agent := ""
+		if s := g.sessions[id]; s != nil {
+			agent = s.info.Agent.Name
+		}
+		g.mu.Unlock()
+		g.o.OnApproval(id, agent, res.Approval)
+	}
 	g.m.MarkTurnEnded(id, g.o.Now())
 	g.mu.Lock()
 	g.inFlight--

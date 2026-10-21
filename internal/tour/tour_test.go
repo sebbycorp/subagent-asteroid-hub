@@ -21,12 +21,14 @@ type fakeClient struct {
 	ckOf   map[string]string
 	gate   chan struct{}
 	failOn string
+
+	opsSessions map[string]bool
 }
 
 func newFake() *fakeClient {
 	return &fakeClient{
-		agents: []traffic.AgentRef{{Namespace: "kagent", Name: "hello-substrate"}},
-		memory: map[string]bool{}, ckOf: map[string]string{},
+		agents: []traffic.AgentRef{{Namespace: "kagent", Name: "asteroids-demo-ops"}, {Namespace: "kagent", Name: "hello-substrate"}},
+		memory: map[string]bool{}, ckOf: map[string]string{}, opsSessions: map[string]bool{},
 	}
 }
 
@@ -48,6 +50,9 @@ func (f *fakeClient) CreateSession(_ context.Context, a traffic.AgentRef, name s
 	f.mu.Lock()
 	f.n++
 	id := fmt.Sprintf("s%d", f.n)
+	if a.Name == HITLAgent {
+		f.opsSessions[id] = true
+	}
 	f.mu.Unlock()
 	return id, f.log("create " + a.Name + " " + name)
 }
@@ -61,6 +66,9 @@ func (f *fakeClient) Chat(_ context.Context, id, text string) (traffic.ChatResul
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.opsSessions[id] {
+		return traffic.ChatResult{TaskID: "hitl-" + id, Approval: &traffic.Approval{TaskID: "hitl-" + id, Tools: []traffic.ApprovalTool{{ID: "c1", Name: "k8s_get_resources"}}}}, nil
+	}
 	if strings.Contains(text, "ORION") {
 		f.memory[id] = true
 		return traffic.ChatResult{Reply: "OK", TaskID: "task-" + id}, nil
@@ -109,16 +117,20 @@ func (m *marks) MarkTurnEnded(id string, _ time.Time) {
 }
 
 type rig struct {
-	t      *Tour
-	c      *fakeClient
-	w      Waver
-	m      *marks
-	active []bool
+	t         *Tour
+	c         *fakeClient
+	w         Waver
+	m         *marks
+	active    []bool
+	approvals []string
 }
 
 func newRig() *rig {
 	r := &rig{c: newFake(), w: &fakeWaves{}, m: &marks{}}
-	r.t = New(r.c, r.w, r.m, Options{OnActive: func(on bool) { r.active = append(r.active, on) }})
+	r.t = New(r.c, r.w, r.m, Options{
+		OnActive:   func(on bool) { r.active = append(r.active, on) },
+		OnApproval: func(id, agent string, _ *traffic.Approval) { r.approvals = append(r.approvals, id+" "+agent) },
+	})
 	return r
 }
 
@@ -134,7 +146,7 @@ func (r *rig) step(t *testing.T, f func(context.Context) error) Status {
 func TestTourWalksAllChapters(t *testing.T) {
 	r := newRig()
 	st := r.step(t, r.t.Start)
-	if !st.Active || st.Chapter != 1 || st.Total != 6 || len(st.Focus) != 1 || st.Focus[0] != "s1" {
+	if !st.Active || st.Chapter != 1 || st.Total != 7 || len(st.Focus) != 1 || st.Focus[0] != "s1" {
 		t.Fatalf("chapter 1: %+v", st)
 	}
 	if !strings.Contains(st.Result, `"OK"`) {
@@ -170,9 +182,21 @@ func TestTourWalksAllChapters(t *testing.T) {
 		t.Fatalf("chapter 5 should chat the tour session, last call %q", last)
 	}
 
-	st = r.step(t, r.t.Next) // 6: density wave
-	if st.Chapter != 6 || r.w.(*fakeWaves).n != 1 || !strings.Contains(st.Result, "3 CHATS") {
+	st = r.step(t, r.t.Next) // 6: human in the loop — ops pauses for approval
+	if st.Chapter != 6 || st.Kind != "hitl" || len(st.Focus) != 1 || !strings.Contains(st.Doing, "PRESS Y") {
 		t.Fatalf("chapter 6: %+v", st)
+	}
+	if len(r.approvals) != 1 || r.approvals[0] != st.Focus[0]+" asteroids-demo-ops" {
+		t.Fatalf("approval not reported: %v", r.approvals)
+	}
+	r.t.Resolved(st.Focus[0], true, traffic.ChatResult{Reply: "There are 8 pods."}, nil)
+	if st = r.t.Status(); !strings.HasPrefix(st.Result, "APPROVED. IT ANSWERED: ") || st.Doing != "" {
+		t.Fatalf("after approval: %+v", st)
+	}
+
+	st = r.step(t, r.t.Next) // 7: density wave
+	if st.Chapter != 7 || r.w.(*fakeWaves).n != 1 || !strings.Contains(st.Result, "3 CHATS") {
+		t.Fatalf("chapter 7: %+v", st)
 	}
 
 	st = r.step(t, r.t.Next) // past the end: tour ends
@@ -182,7 +206,7 @@ func TestTourWalksAllChapters(t *testing.T) {
 	if fmt.Sprint(r.active) != "[true false]" {
 		t.Fatalf("OnActive calls %v", r.active)
 	}
-	if len(r.m.sent) != 4 || len(r.m.ended) != 4 {
+	if len(r.m.sent) != 5 || len(r.m.ended) != 5 {
 		t.Fatalf("marks sent %v ended %v", r.m.sent, r.m.ended)
 	}
 }
@@ -251,7 +275,7 @@ func TestTourDensitySingularChat(t *testing.T) {
 	r.w = &oneWave{}
 	r.t = New(r.c, r.w, r.m, Options{})
 	r.step(t, r.t.Start)
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 6; i++ {
 		r.step(t, r.t.Next)
 	}
 	if st := r.t.Status(); !strings.HasPrefix(st.Result, "1 CHAT SENT.") {
@@ -262,3 +286,15 @@ func TestTourDensitySingularChat(t *testing.T) {
 type oneWave struct{}
 
 func (oneWave) Wave(context.Context) (int, error) { return 1, nil }
+
+func TestTourHITLChapterWithoutOpsAgent(t *testing.T) {
+	r := newRig()
+	r.step(t, r.t.Start)
+	r.c.agents = []traffic.AgentRef{{Namespace: "kagent", Name: "hello-substrate"}}
+	for i := 0; i < 5; i++ {
+		r.step(t, r.t.Next)
+	}
+	if st := r.t.Status(); st.Kind != "hitl" || !strings.Contains(st.Error, "ASTEROIDS-DEMO-OPS") {
+		t.Fatalf("status %+v", st)
+	}
+}

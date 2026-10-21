@@ -23,6 +23,7 @@ type fakeClient struct {
 	listGate  chan struct{}    // if set, ListReadyAgents blocks until closed
 	listing   chan struct{}    // if set, signalled when ListReadyAgents is entered
 	chatErr   map[string]error // per session ID
+	chatRes   map[string]ChatResult
 	n         int
 }
 
@@ -64,6 +65,9 @@ func (f *fakeClient) Chat(_ context.Context, id, _ string) (ChatResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.chats = append(f.chats, id)
+	if r, ok := f.chatRes[id]; ok {
+		return r, f.chatErr[id]
+	}
 	return ChatResult{Reply: "ok", TaskID: "task-" + id}, f.chatErr[id]
 }
 func (f *fakeClient) ListHarnesses(context.Context) ([]string, error) { return f.harnesses, nil }
@@ -320,5 +324,30 @@ func TestChatOnGoneSessionForgetsIt(t *testing.T) {
 	wave(t, g)
 	if len(c.created) != 2 {
 		t.Fatalf("expected a fresh session after the gone one, created %v", c.created)
+	}
+}
+
+type orderMarker struct {
+	mu     sync.Mutex
+	events []string
+}
+
+func (m *orderMarker) MarkSent(id string, _ time.Time)      { m.add("sent " + id) }
+func (m *orderMarker) MarkTurnEnded(id string, _ time.Time) { m.add("ended " + id) }
+func (m *orderMarker) add(e string) {
+	m.mu.Lock()
+	m.events = append(m.events, e)
+	m.mu.Unlock()
+}
+
+func TestWaveReportsPausedTurnBeforeItEnds(t *testing.T) {
+	ap := &Approval{TaskID: "t1", Tools: []ApprovalTool{{ID: "c1", Name: "k8s_get_resources"}}}
+	c := &fakeClient{agents: agents("ops"), chatRes: map[string]ChatResult{"id-1": {Approval: ap}}}
+	m := &orderMarker{}
+	g := New(c, m, Options{OnApproval: func(id, agent string, a *Approval) { m.add("approval " + id + " " + agent + " " + a.TaskID) }})
+	wave(t, g)
+	got := strings.Join(m.events, ", ")
+	if got != "sent id-1, approval id-1 ops t1, ended id-1" {
+		t.Fatalf("order: %s", got)
 	}
 }

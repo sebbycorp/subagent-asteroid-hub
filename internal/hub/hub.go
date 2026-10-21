@@ -53,6 +53,7 @@ type State struct {
 	Waves     WaveStatus     `json:"waves"`
 	Tour      any            `json:"tour,omitempty"` // the guided tour's card, when set
 	Gateway   GatewayStats   `json:"gateway"`
+	Approvals any            `json:"approvals,omitempty"` // turns waiting for a person
 }
 
 const subBuffer = 256
@@ -184,6 +185,14 @@ func (h *Hub) Gateway(evs []gateway.Event) {
 		h.broadcastLocked(b)
 	}
 	h.broadcastLocked(h.stateMsgLocked())
+}
+
+// SetApprovals updates the turns waiting for a human decision.
+func (h *Hub) SetApprovals(a any) {
+	h.mu.Lock()
+	h.state.Approvals = a
+	h.broadcastLocked(h.stateMsgLocked())
+	h.mu.Unlock()
 }
 
 // State returns a copy of the current state.

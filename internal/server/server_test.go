@@ -62,7 +62,7 @@ func newRig(t *testing.T, waveErr error) *rig {
 		return nil
 	}
 	assets := fstest.MapFS{"index.html": {Data: []byte("<title>show</title>")}}
-	r.srv = httptest.NewServer(New(h, r.waves, r.tour, connector, assets, ConnInfo{API: "http://a:8083", UserID: "admin@kagent.dev", Token: "secret", Namespace: "kagent"}))
+	r.srv = httptest.NewServer(New(h, r.waves, r.tour, connector, assets, ConnInfo{API: "http://a:8083", UserID: "admin@kagent.dev", Token: "secret", Namespace: "kagent"}, &fakeApprovals{}))
 	t.Cleanup(r.srv.Close)
 	return r
 }
@@ -299,5 +299,33 @@ func TestServerTourActions(t *testing.T) {
 	r.tour.err = errors.New("the tour is still running this chapter")
 	if resp, body := post(t, r.srv.URL+"/api/tour", `{"action":"next"}`); resp.StatusCode != 409 || !strings.Contains(body, "still running") {
 		t.Fatalf("busy: %d %s", resp.StatusCode, body)
+	}
+}
+
+type fakeApprovals struct {
+	calls []string
+	err   error
+}
+
+func (f *fakeApprovals) Decide(_ context.Context, id string, approved bool) error {
+	f.calls = append(f.calls, fmt.Sprintf("%s:%v", id, approved))
+	return f.err
+}
+
+func TestServerApproval(t *testing.T) {
+	ap := &fakeApprovals{}
+	h := hub.New(emptySource{}, "env")
+	srv := httptest.NewServer(New(h, &fakeWaves{}, &fakeTour{}, func(ConnInfo) error { return nil }, fstest.MapFS{}, ConnInfo{}, ap))
+	defer srv.Close()
+	if resp, body := post(t, srv.URL+"/api/approval", `{"approved":true}`); resp.StatusCode != 200 {
+		t.Fatalf("%d %s", resp.StatusCode, body)
+	}
+	post(t, srv.URL+"/api/approval", `{"sessionId":"s2","approved":false}`)
+	if fmt.Sprint(ap.calls) != "[:true s2:false]" {
+		t.Fatalf("calls %v", ap.calls)
+	}
+	ap.err = errors.New("no turn is waiting for that decision")
+	if resp, _ := post(t, srv.URL+"/api/approval", `{"approved":true}`); resp.StatusCode != 409 {
+		t.Fatalf("nothing pending: %d", resp.StatusCode)
 	}
 }

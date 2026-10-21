@@ -36,6 +36,11 @@ type Tour interface {
 	Stop()
 }
 
+// Approvals answers turns paused for a person (human in the loop).
+type Approvals interface {
+	Decide(ctx context.Context, sessionID string, approved bool) error
+}
+
 // ConnInfo describes a kagent environment.
 type ConnInfo struct {
 	API       string `json:"api"`
@@ -53,14 +58,15 @@ type server struct {
 	hub     Streamer
 	waves   Waves
 	tour    Tour
+	approve Approvals
 	connect Connector
 	mu      sync.Mutex
 	conn    ConnInfo
 }
 
 // New builds the HTTP handler.
-func New(h Streamer, w Waves, t Tour, connect Connector, assets fs.FS, initial ConnInfo) http.Handler {
-	s := &server{hub: h, waves: w, tour: t, connect: connect, conn: initial}
+func New(h Streamer, w Waves, t Tour, connect Connector, assets fs.FS, initial ConnInfo, a Approvals) http.Handler {
+	s := &server{hub: h, waves: w, tour: t, approve: a, connect: connect, conn: initial}
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(assets))
 	mux.HandleFunc("GET /events", s.events)
@@ -69,6 +75,7 @@ func New(h Streamer, w Waves, t Tour, connect Connector, assets fs.FS, initial C
 	mux.HandleFunc("POST /api/auto", sameOriginJSON(s.auto))
 	mux.HandleFunc("POST /api/demo-agents", sameOriginJSON(s.demo))
 	mux.HandleFunc("POST /api/tour", sameOriginJSON(s.tourAction))
+	mux.HandleFunc("POST /api/approval", sameOriginJSON(s.approval))
 	mux.HandleFunc("GET /api/config", s.getConfig)
 	mux.HandleFunc("POST /api/config", sameOriginJSON(s.setConfig))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
@@ -193,6 +200,23 @@ func (s *server) tourAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"ok": body.Action})
+}
+
+// approval answers a paused turn: {"sessionId": "" (oldest), "approved": true}.
+func (s *server) approval(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		SessionID string `json:"sessionId"`
+		Approved  bool   `json:"approved"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := s.approve.Decide(context.WithoutCancel(r.Context()), body.SessionID, body.Approved); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"approved": body.Approved})
 }
 
 func (s *server) getConfig(w http.ResponseWriter, _ *http.Request) {

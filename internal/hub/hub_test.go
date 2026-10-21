@@ -433,3 +433,18 @@ func TestHubLeavesUntaggedCallUnattributedWhenAmbiguous(t *testing.T) {
 		}
 	}
 }
+
+func TestHubSetApprovalsInState(t *testing.T) {
+	h := New(src(ok(0)), "env")
+	ch, cancel := h.Subscribe()
+	defer cancel()
+	drain(ch)
+	h.SetApprovals([]map[string]any{{"sessionId": "s1", "agent": "ops"}})
+	if ms := drain(ch); len(ms) != 1 || ms[0].Type != "state" {
+		t.Fatalf("messages %+v", ms)
+	}
+	b, _ := json.Marshal(h.State())
+	if !strings.Contains(string(b), `"approvals":[{"agent":"ops","sessionId":"s1"}]`) {
+		t.Fatalf("state %s", b)
+	}
+}

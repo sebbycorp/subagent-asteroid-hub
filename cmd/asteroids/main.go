@@ -15,6 +15,7 @@ import (
 
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/config"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/gateway"
+	"github.com/sebbycorp/subagent-asteroid-hub/internal/hitl"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/hub"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/kagent"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/server"
@@ -38,9 +39,23 @@ func main() {
 	}
 
 	h := hub.New(client, client.Env())
+
+	// Turns paused for a person (human in the loop) wait on the board; the
+	// screen shows each as a frozen ship with its pilot holding up the request.
+	var guide *tour.Tour
+	board := hitl.New(client, h, hitl.Options{
+		OnChange: func(p []hitl.Pending) { h.SetApprovals(p) },
+		OnResult: func(id string, approved bool, res traffic.ChatResult, err error) {
+			if guide != nil {
+				guide.Resolved(id, approved, res, err)
+			}
+		},
+	})
+
 	gen := traffic.New(client, h, traffic.Options{
-		Namespace: cfg.Namespace,
-		Interval:  cfg.WaveInterval,
+		OnApproval: board.Add,
+		Namespace:  cfg.Namespace,
+		Interval:   cfg.WaveInterval,
 		OnStatus: func(auto bool, inFlight int, note string) {
 			h.SetWaves(hub.WaveStatus{Auto: auto, InFlight: inFlight, Note: note})
 		},
@@ -49,8 +64,9 @@ func main() {
 
 	// Auto waves pause while the tour runs so each chapter's action is clear.
 	var autoBefore bool
-	guide := tour.New(client, gen, h, tour.Options{
-		OnChange: func(s tour.Status) { h.SetTour(s) },
+	guide = tour.New(client, gen, h, tour.Options{
+		OnApproval: board.Add,
+		OnChange:   func(s tour.Status) { h.SetTour(s) },
 		OnActive: func(on bool) {
 			if on {
 				autoBefore = gen.Auto()
@@ -75,6 +91,7 @@ func main() {
 		h.SetSource(next, next.Env())
 		gen.SetClient(next)
 		guide.SetClient(next)
+		board.SetDecider(next)
 		prev.Close()
 		log.Printf("switched to %s", next.Env())
 		return nil
@@ -91,7 +108,7 @@ func main() {
 	go h.Run(ctx, 250*time.Millisecond)
 	go gen.Run(ctx)
 
-	srv := &http.Server{Addr: cfg.Listen, Handler: server.New(h, gen, guide, connect, web.Files, conn)}
+	srv := &http.Server{Addr: cfg.Listen, Handler: server.New(h, gen, guide, connect, web.Files, conn, board)}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
