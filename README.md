@@ -3,8 +3,9 @@
 A self-running, live show that teaches how **kagent Agent Substrate** works,
 drawn as 1979 vector *Asteroids*. Nobody plays: you put it on a screen and
 narrate. Every rock, shot and capsule is a real actor or a real state change in
-a real cluster, read from the kagent 1.0 API. The app also sends real chats to
-your agents in waves, so there is always something happening.
+a real cluster, read from the kagent 1.0 API. Press `T` and the app sends a
+wave of real chats to your agents. It never chats on its own unless you turn
+automatic waves on.
 
 ![A wave of real chats: four agents launch from the worker pool, run, and are frozen into the snapshot store](docs/media/show.gif)
 
@@ -93,8 +94,8 @@ A Stream Deck or script can trigger a wave with
 | `KAGENT_TOKEN` | — | optional bearer token |
 | `KAGENT_CA_FILE` | — | CA file for TLS endpoints (mount it into the container) |
 | `KAGENT_NAMESPACE` | `kagent` | where agents are listed and demo agents are created |
-| `WAVE_INTERVAL` | `20s` | time between automatic waves |
-| `AUTO_WAVES` | `true` | start with automatic waves on |
+| `WAVE_INTERVAL` | `20s` | time between automatic waves (when on) |
+| `AUTO_WAVES` | `false` | start with automatic waves on; otherwise waves are manual (`T`) |
 | `DEMO_AGENTS` | `false` | create demo agents at start if none are ready |
 | `LISTEN_ADDR` | `:7790` | HTTP listen address |
 
