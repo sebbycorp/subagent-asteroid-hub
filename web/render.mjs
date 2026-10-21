@@ -311,30 +311,94 @@ function drawPilot(ctx, x, y, now, ap) {
   text(ctx, lines[1], sx + 7, sy + 23, { size: 8, spacing: 1, color: INK });
 }
 
-// drawShip draws the fighter that marks each freeze: a swept-wing ship with a
-// lit cockpit, twin engines and wingtip lights.
+// drawShip draws the fighter that marks each freeze: a needle-nosed delta
+// interceptor with a neon edge glow, a lit canopy, wingtip pods with
+// blinking nav lights, twin ion engines, and plasma bolts when it fires.
 export function drawShip(ctx, ship) {
+  const now = typeof performance === 'undefined' ? Date.now() : performance.now();
+  const glow = (color, blur) => { ctx.shadowColor = color; ctx.shadowBlur = blur; };
   ctx.save();
   ctx.translate(ship.x, ship.y);
   ctx.rotate(ship.a);
-  ctx.scale(1.25, 1.25);
-  const hull = [[20, 0], [7, -4], [-6, -14], [-11, -14], [-6, -5], [-10, -5], [-10, 5], [-6, 5], [-11, 14], [-6, 14], [7, 4]];
-  poly(ctx, hull, 0, 0);
-  ctx.moveTo(-2, -8); ctx.lineTo(6, -4); ctx.moveTo(-2, 8); ctx.lineTo(6, 4);
-  stroke(ctx, INK, 1.2);
-  ctx.beginPath();
-  ctx.ellipse(8, 0, 4.5, 2.2, 0, 0, Math.PI * 2);
-  stroke(ctx, GW, 1.1);
-  for (const ey of [-3, 3]) {
-    const f = 6 + Math.random() * 8;
+  ctx.scale(1.35, 1.35);
+  // ion exhaust: two flickering plasma cones and rings drifting off behind
+  for (const ey of [-4, 4]) {
+    const f = 9 + Math.random() * 9;
     ctx.beginPath();
-    ctx.moveTo(-10, ey - 1.6); ctx.lineTo(-10 - f, ey); ctx.lineTo(-10, ey + 1.6);
-    stroke(ctx, RESUMED, 1);
+    ctx.moveTo(-12, ey - 2.2); ctx.lineTo(-12 - f, ey); ctx.lineTo(-12, ey + 2.2);
+    glow(RESUMED, 10);
+    stroke(ctx, RESUMED, 1.2);
+    ctx.beginPath();
+    ctx.moveTo(-12, ey - 1); ctx.lineTo(-12 - f * 0.55, ey); ctx.lineTo(-12, ey + 1);
+    stroke(ctx, INK, 0.8);
+    for (let i = 0; i < 2; i++) {
+      const k = ((now / 450) + i / 2) % 1;
+      ctx.beginPath();
+      ctx.ellipse(-14 - k * 16, ey, 0.8, 2.4 * (1 - k * 0.5), 0, 0, Math.PI * 2);
+      const prev = ctx.globalAlpha;
+      ctx.globalAlpha = prev * (1 - k);
+      stroke(ctx, RESUMED, 0.7);
+      ctx.globalAlpha = prev;
+    }
   }
-  ctx.beginPath(); ctx.arc(-9, -14, 1.3, 0, Math.PI * 2); ctx.fillStyle = RED; ctx.fill();
-  ctx.beginPath(); ctx.arc(-9, 14, 1.3, 0, Math.PI * 2); ctx.fillStyle = ALIEN; ctx.fill();
+  // hull: needle nose, swept delta wings, notched tail; neon edge glow
+  const hull = [[28, 0], [12, -3], [3, -6], [-7, -19], [-13, -21], [-10, -7], [-13, -5], [-13, 5], [-10, 7], [-13, 21], [-7, 19], [3, 6], [12, 3]];
+  poly(ctx, hull, 0, 0);
+  ctx.fillStyle = 'rgba(79,216,255,0.07)';
+  ctx.fill();
+  glow(NEW, 8);
+  stroke(ctx, NEW, 1.3);
+  ctx.shadowBlur = 0;
+  // panel lines: spine, wing roots, leading-edge strakes
+  ctx.beginPath();
+  ctx.moveTo(-10, 0); ctx.lineTo(3, 0);
+  ctx.moveTo(1, -5); ctx.lineTo(-6, -14); ctx.moveTo(1, 5); ctx.lineTo(-6, 14);
+  ctx.moveTo(-9, -6); ctx.lineTo(-9, 6);
+  stroke(ctx, DIM, 0.7);
+  // forward canards
+  ctx.beginPath();
+  ctx.moveTo(14, -2.6); ctx.lineTo(9, -8); ctx.lineTo(7, -4.2);
+  ctx.moveTo(14, 2.6); ctx.lineTo(9, 8); ctx.lineTo(7, 4.2);
+  stroke(ctx, INK, 0.9);
+  // canopy: a lit teardrop
+  ctx.beginPath();
+  ctx.ellipse(8, 0, 6, 2.3, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(125,255,176,0.35)';
+  ctx.fill();
+  glow(GW, 6);
+  stroke(ctx, GW, 1);
+  // wingtip pods with blinking nav lights (red port, green starboard)
+  const blink = Math.sin(now / 180) > 0.2;
+  for (const [py, color] of [[-20, RED], [20, ALIEN]]) {
+    ctx.beginPath();
+    ctx.moveTo(-13, py); ctx.lineTo(-3, py);
+    glow(NEW, 0);
+    stroke(ctx, INK, 1.1);
+    ctx.beginPath();
+    ctx.arc(-3, py, blink ? 1.7 : 1, 0, Math.PI * 2);
+    glow(color, blink ? 8 : 0);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+  // twin engine cores
+  for (const ey of [-4, 4]) {
+    ctx.beginPath();
+    ctx.arc(-12, ey, 1.6, 0, Math.PI * 2);
+    glow(RESUMED, 6);
+    ctx.fillStyle = RESUMED;
+    ctx.fill();
+  }
+  // firing: plasma bolts from both wingtips and a muzzle flare at the nose
   if (ship.flash > 0) {
-    ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(28, 0); stroke(ctx, INK, 1.4);
+    glow(RED, 10);
+    ctx.beginPath();
+    ctx.moveTo(-1, -20); ctx.lineTo(16, -20); ctx.moveTo(-1, 20); ctx.lineTo(16, 20);
+    ctx.moveTo(28, 0); ctx.lineTo(38, 0);
+    stroke(ctx, RED, 1.6);
+    ctx.beginPath();
+    ctx.arc(29, 0, 2.2, 0, Math.PI * 2);
+    ctx.fillStyle = INK;
+    ctx.fill();
   }
   ctx.restore();
 }

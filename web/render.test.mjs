@@ -73,3 +73,24 @@ test('the moon hides when it passes behind the planet', async () => {
     if (Math.sin(a) < 0 && Math.hypot(m.x - c.x, m.y - c.y) < PLANET_R + 4) assert.equal(m.visible, false, `peeks through at ${a}`);
   }
 });
+
+test('the fighter glows, but its glow never leaks into the rest of the scene', async () => {
+  const { drawShip } = await import('./render.mjs');
+  const calls = [];
+  let depth = 0, glowed = false;
+  const ctx = new Proxy({ shadowBlur: 0, globalAlpha: 1 }, {
+    get(t, k) {
+      if (k in t) return t[k];
+      return (...a) => {
+        calls.push(k);
+        if (k === 'save') depth++;
+        if (k === 'restore') { depth--; t.shadowBlur = 0; }
+      };
+    },
+    set(t, k, v) { if (k === 'shadowBlur' && v > 0) glowed = true; t[k] = v; return true; },
+  });
+  drawShip(ctx, { x: 100, y: 100, a: 0.5, flash: 1 });
+  assert.equal(depth, 0, 'every save is restored');
+  assert.ok(glowed, 'the fighter has a neon glow');
+  assert.ok(calls.filter((c) => c === 'stroke').length >= 8, 'a detailed hull, not a sketch');
+});
