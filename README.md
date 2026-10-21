@@ -17,16 +17,16 @@ store the instant each turn ends.*
 
 | On screen | In Agent Substrate |
 |-----------|--------------------|
-| Wedge-hulled destroyer with the kagent emblem | a **WorkerPool**; the hangar lights on its keel are its **workers** (lit while hosting an actor) |
-| Starfighter launched from the destroyer | an actor being **created** (a new session gets a fresh gVisor sandbox); four designs (X-, Y-, A- and B-wing style), 3D-shaded, each session always the same one |
-| Capsule rising from the store, then the same fighter relaunching | a **resume**: the actor's snapshot is restored onto a worker |
-| Fighter flying nose first and growing, labelled `RUNNING ON WORKER …` | an actor **running** a turn (it powers up while its sandbox works) |
-| The interceptor fires, the fighter breaks up, a capsule drops into the store | a **suspend**: memory and disk are checkpointed to S3 and the worker is freed |
-| Dark, dashed, frozen fighter with the kagent robot pilot holding up a sign | **human in the loop**: the agent asked to run a tool and is suspended (0 CPU) until someone presses `Y` or `X` |
+| Republic destroyer (red markings) with the kagent emblem | a **WorkerPool**; the hangar lights on its keel are its **workers** (lit while hosting an actor) |
+| Rebel ship launched from the destroyer | an actor being **created** (a new session gets a fresh gVisor sandbox); an X-wing, Y-wing, A-wing or the Millennium Falcon, 3D-shaded, each session always the same one |
+| Capsule rising from the store, then the same ship relaunching | a **resume**: the actor's snapshot is restored onto a worker |
+| Ship flying nose first and growing, labelled `RUNNING ON WORKER …` | an actor **running** a turn (it powers up while its sandbox works) |
+| Vader's TIE fires, the ship breaks up, a capsule drops into the store | a **suspend**: memory and disk are checkpointed to S3 and the worker is freed |
+| Dark, dashed, frozen ship with the kagent robot pilot holding up a sign | **human in the loop**: the agent asked to run a tool and is suspended (0 CPU) until someone presses `Y` or `X` |
 | Snapshot store | every suspended actor, stored at 0 CPU and 0 memory, with a live log underneath |
 | Cyan trim / amber trim | a **new** session (cloned from the agent's golden snapshot) / a **resumed** one (restored from its own snapshot, generation shown) |
 | Death Star with the agentgateway mark in its dish, inside a hexagon shield | **agentgateway**, the one gate every model call, MCP tool call and chat in passes through; the models kagent uses are listed under it |
-| Dotted shield on a fighter + a beam to the Death Star | a real request agentgateway handled for that agent: a model call, a tool call, or a chat coming in |
+| Dotted shield on a ship + a beam to the Death Star | a real request agentgateway handled for that agent: a model call, a tool call, or a chat coming in |
 
 The ship doesn't cause the suspend. Substrate suspends an actor by itself, the
 moment its turn ends. On a local kind cluster that's within a few milliseconds
@@ -123,7 +123,7 @@ Without Docker, run `make dev`.
 | Key | Action |
 |-----|--------|
 | `N` | start the guided tour / next chapter (`Esc` ends it) |
-| `Y` / `X` | approve / reject the tool call a frozen fighter's pilot is holding up |
+| `Y` / `X` | approve / reject the tool call a frozen ship's pilot is holding up |
 | `T` | send a wave of chats now |
 | `A` | toggle automatic waves |
 | `D` | create three small demo agents (only if the namespace has no ready agents) |

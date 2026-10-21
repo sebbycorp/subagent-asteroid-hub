@@ -53,15 +53,15 @@ function seeded(str) {
   };
 }
 
-const SCOUT_KINDS = ['xwing', 'ywing', 'awing', 'bwing'];
+const SCOUT_KINDS = ['xwing', 'ywing', 'awing', 'falcon'];
 
-// scoutKind picks the starfighter design for an actor, always the same one, so a
+// scoutKind picks the Rebel ship for an actor, always the same one, so a
 // session keeps its look across suspends and resumes.
 export function scoutKind(uid) {
   return SCOUT_KINDS[Math.floor(seeded(`kind:${uid}`)() * SCOUT_KINDS.length)];
 }
 
-// Each fighter's hull seen from above, nose along +x: what breaks apart when
+// Each ship's hull seen from above, nose along +x: what breaks apart when
 // Substrate freezes it.
 const OUTLINES = {
   // X-foils: needle nose, four wings spread in an X, engines at the roots
@@ -70,15 +70,22 @@ const OUTLINES = {
   ywing: [[16, 0], [12, -4], [4, -4], [2, -10], [-14, -10], [-14, -6], [-6, -6], [-6, 6], [-14, 6], [-14, 10], [2, 10], [4, 4], [12, 4]],
   // a fast wedge
   awing: [[16, 0], [-8, -13], [-12, -13], [-10, 0], [-12, 13], [-8, 13]],
-  // one long main wing crossing a short fuselage
-  bwing: [[14, 0], [8, -3], [-4, -3], [-4, -17], [-8, -17], [-8, -3], [-12, -2], [-12, 2], [-8, 3], [-8, 17], [-4, 17], [-4, 3], [8, 3]],
+  // a disc with two forward mandibles
+  falcon: (() => {
+    const pts = [[18, -7], [18, -2.5], [11, -2], [11, 2], [18, 2.5], [18, 7]];
+    for (let i = 0; i <= 12; i++) {
+      const a = 0.6 + (i / 12) * (Math.PI * 2 - 1.2);
+      pts.push([Math.cos(a) * 13, Math.sin(a) * 13]);
+    }
+    return pts;
+  })(),
 };
 
 export function scoutOutline(kind) {
   return OUTLINES[kind] || OUTLINES.xwing;
 }
 
-// steer turns a fighter's heading toward its flight path, easing in and
+// steer turns a ship's heading toward its flight path, easing in and
 // always the short way round. A stopped fighter keeps its heading.
 export function steer(rot, vx, vy, dt) {
   if (!vx && !vy) return rot;

@@ -403,7 +403,7 @@ function connectStream() {
     if (msg.type === 'state') {
       world.state = msg.state;
       world.idleCaption = msg.state.connected
-        ? 'CONNECTED. EVERY FIGHTER IS A LIVE SANDBOX · EVERY CAPSULE A SNAPSHOT IN STORAGE.'
+        ? 'CONNECTED. EVERY SHIP IS A LIVE SANDBOX · EVERY CAPSULE A SNAPSHOT IN STORAGE.'
         : 'WAITING FOR SUBSTRATE…';
       syncApprovals(msg.state.approvals);
       reconcile();

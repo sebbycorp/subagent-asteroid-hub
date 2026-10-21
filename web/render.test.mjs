@@ -74,25 +74,17 @@ test('the moon hides when it passes behind the planet', async () => {
   }
 });
 
-test('the fighter glows, but its glow never leaks into the rest of the scene', async () => {
+test("our ship is Vader's 3D-shaded TIE Advanced, whose glow never leaks into the scene", async () => {
   const { drawShip } = await import('./render.mjs');
-  const calls = [];
-  let depth = 0, glowed = false;
-  const ctx = new Proxy({ shadowBlur: 0, globalAlpha: 1 }, {
-    get(t, k) {
-      if (k in t) return t[k];
-      return (...a) => {
-        calls.push(k);
-        if (k === 'save') depth++;
-        if (k === 'restore') { depth--; t.shadowBlur = 0; }
-      };
-    },
-    set(t, k, v) { if (k === 'shadowBlur' && v > 0) glowed = true; t[k] = v; return true; },
-  });
-  drawShip(ctx, { x: 100, y: 100, a: 0.5, flash: 1 });
-  assert.equal(depth, 0, 'every save is restored');
-  assert.ok(glowed, 'the fighter has a neon glow');
-  assert.ok(calls.filter((c) => c === 'stroke').length >= 8, 'a detailed hull, not a sketch');
+  for (const flash of [0, 1]) {
+    const { ctx, calls, depth } = recordingCtx();
+    let glowed = false;
+    drawShip(new Proxy(ctx, { set(t, k, v) { if (k === 'shadowBlur' && v > 0) glowed = true; t[k] = v; return true; } }), { x: 100, y: 100, a: 0.5, flash });
+    assert.equal(depth(), 0, 'every save is restored');
+    assert.ok(glowed, 'engines and lasers glow');
+    assert.ok(calls.includes('createRadialGradient'), 'a ball cockpit lit like a sphere');
+    assert.ok(calls.filter((c) => c === 'stroke').length >= 10, 'a detailed TIE');
+  }
 });
 
 test('the mothership faces the way it is flying', async () => {
@@ -122,14 +114,14 @@ function recordingCtx() {
   return { ctx, calls, depth: () => depth };
 }
 
-test('each starfighter is shaded like a 3D model and leaves the canvas as it found it', async () => {
+test('each Rebel ship is shaded like a 3D model and leaves the canvas as it found it', async () => {
   const { drawScout } = await import('./render.mjs');
-  for (const kind of ['xwing', 'ywing', 'awing', 'bwing']) {
+  for (const kind of ['xwing', 'ywing', 'awing', 'falcon']) {
     for (const frozen of [false, true]) {
       const { ctx, calls, depth } = recordingCtx();
       drawScout(ctx, { x: 100, y: 100, rot: 1, kind, agent: 'a', sub: 's', frozen }, 1000, null);
       assert.equal(depth(), 0, `${kind} balances save/restore`);
-      if (!frozen) assert.ok(calls.includes('createLinearGradient'), `${kind} has metal shading`);
+      if (!frozen) assert.ok(calls.some((c) => c.endsWith('Gradient')), `${kind} has metal shading`);
       assert.ok(calls.filter((c) => c === 'stroke').length >= 6, `${kind} is detailed`);
     }
   }

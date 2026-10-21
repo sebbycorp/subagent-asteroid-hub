@@ -131,7 +131,8 @@ export function saucerSpots(pools, t = 0) {
 const KAGENT = typeof Image === 'undefined' ? {} : Object.assign(new Image(), { src: 'kagent-mark.png' });
 
 // drawSaucer draws a worker pool as kagent's capital ship, a wedge-hulled
-// destroyer in side profile: bridge tower with twin shield domes, the kagent
+// Republic destroyer in side profile (red Republic markings along its deck
+// and prow), launching Rebel ships: bridge tower with twin shield domes, the kagent
 // mark on its flank, glowing engines, running lights along the hull trench,
 // one hangar light per worker (lit while hosting an actor), and a tractor
 // beam from the hangar when it launches a UFO. It flies nose first.
@@ -167,6 +168,13 @@ function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
   glow(NEW, 5);
   stroke(ctx, INK, 1.4 / S);
   ctx.shadowBlur = 0;
+  // Republic markings: a red stripe along the deck and a red prow
+  ctx.beginPath();
+  ctx.moveTo(70, 1.6); ctx.lineTo(-24, -6.6);
+  stroke(ctx, RED, 1.6 / S);
+  shape(ctx, [[74, 3], [62, 1.9], [62, 4.6]]);
+  ctx.fillStyle = RED;
+  ctx.fill();
   // hull trench and deck plating
   ctx.beginPath();
   ctx.moveTo(70, 3); ctx.lineTo(-66, 1);
@@ -260,9 +268,13 @@ const LIGHT = { x: -0.6, y: -0.8 };
 
 // metal is a hull gradient for a ship rotated by rot: bright on the side
 // facing the light, dark away from it.
-function metal(ctx, rot, reach, lit = '#d7dee8', dark = '#1b2129') {
+function localLight(rot) {
   const c = Math.cos(-rot), s = Math.sin(-rot);
-  const lx = c * LIGHT.x - s * LIGHT.y, ly = s * LIGHT.x + c * LIGHT.y;
+  return [c * LIGHT.x - s * LIGHT.y, s * LIGHT.x + c * LIGHT.y];
+}
+
+function metal(ctx, rot, reach, lit = '#d7dee8', dark = '#1b2129') {
+  const [lx, ly] = localLight(rot);
   const g = ctx.createLinearGradient(lx * reach, ly * reach, -lx * reach, -ly * reach);
   g.addColorStop(0, lit);
   g.addColorStop(0.55, '#6b7584');
@@ -276,8 +288,9 @@ function shape(ctx, pts) {
   ctx.closePath();
 }
 
-// drawScout draws a session's sandbox as a starfighter in one of four
-// designs, shaded like a 3D model, flying nose first; it powers up (grows)
+// drawScout draws a session's sandbox as a Rebel ship (X-, Y- or A-wing, or
+// the Millennium Falcon) launched from the Republic destroyer, shaded like a
+// 3D model, flying nose first; it powers up (grows)
 // while working. Its trim and engines carry its origin colour (new or
 // resumed). A frozen fighter (waiting for a human) goes dark and dashed,
 // with its pilot out on the hull holding up the request.
@@ -344,13 +357,35 @@ export function drawScout(ctx, r, now, approval) {
     trim([[2, -6.5, -6, -11], [2, 6.5, -6, 11]]);
     engine(-11, -9, 1.8); engine(-11, 9, 1.8);
     canopy(4, 0, 4, 2.4);
-  } else if (r.kind === 'bwing') {
-    hull([[-4, -17], [-8, -17], [-8, 17], [-4, 17]], 18); // the long main wing
-    hull([[14, 0], [8, -3], [-12, -3], [-12, 3], [8, 3]], 8); // fuselage
-    trim([[-6, -16, -6, -9], [-6, 9, -6, 16]]);
-    ctx.beginPath(); ctx.moveTo(-4, -16); ctx.lineTo(4, -16); ctx.moveTo(-4, 16); ctx.lineTo(4, 16); stroke(ctx, INK, lw * 0.8); // cannons
-    engine(-12, 0, 2.2);
-    canopy(8, 0, 3.6, 2);
+  } else if (r.kind === 'falcon') {
+    for (const m of [1, -1]) hull([[18, 7 * m], [18, 2.5 * m], [9, 2.5 * m], [9, 7 * m]], 8); // mandibles
+    ctx.beginPath(); // the disc, lit like a shallow dome
+    ctx.arc(0, 0, 13, 0, Math.PI * 2);
+    if (live) {
+      const [gx, gy] = localLight(r.rot);
+      const g = ctx.createRadialGradient(gx * 6, gy * 6, 1, 0, 0, 13.5);
+      g.addColorStop(0, '#e6ebf1');
+      g.addColorStop(0.6, '#7d8794');
+      g.addColorStop(1, '#232931');
+      ctx.fillStyle = g;
+      ctx.fill();
+    }
+    stroke(ctx, live ? 'rgba(255,255,255,0.6)' : DIM, lw);
+    ctx.beginPath(); // hull plating: spokes from the hub
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + 0.3;
+      ctx.moveTo(Math.cos(a) * 4.5, Math.sin(a) * 4.5); ctx.lineTo(Math.cos(a) * 12, Math.sin(a) * 12);
+    }
+    stroke(ctx, live ? 'rgba(0,0,0,0.35)' : DIM, lw * 0.6);
+    ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); stroke(ctx, color, lw); // the hub
+    ctx.beginPath(); ctx.ellipse(-2, -6.5, 2.6, 1.6, 0.4, 0, Math.PI * 2); stroke(ctx, INK, lw * 0.8); // radar dish
+    hull([[13, 9.5], [13, 13], [4, 13], [4, 9.5]], 6); // the cockpit tube, off to starboard
+    canopy(13.6, 11.2, 2.3, 2);
+    ctx.beginPath(); // the engine strip glowing along the stern
+    ctx.arc(0, 0, 12.4, Math.PI - 0.9, Math.PI + 0.9);
+    if (live) { ctx.shadowColor = color; ctx.shadowBlur = 10 + Math.random() * 4; }
+    stroke(ctx, color, lw * 2);
+    ctx.shadowBlur = 0;
   } else { // xwing
     for (const sy of [-1, 1]) { // the X-foils: an upper wing (lit) and a lower one peeking out
       hull([[-1, 2.5 * sy], [-5, 15 * sy], [-10, 15 * sy], [-10, 2.5 * sy]], 16);
@@ -424,95 +459,89 @@ function drawPilot(ctx, x, y, now, ap) {
   text(ctx, lines[1], sx + 7, sy + 23, { size: 8, spacing: 1, color: INK });
 }
 
-// drawShip draws the fighter that marks each freeze: a needle-nosed delta
-// interceptor with a neon edge glow, a lit canopy, wingtip pods with
-// blinking nav lights, twin ion engines, and plasma bolts when it fires.
+// drawShip draws our ship, the one that marks each freeze: Vader's TIE
+// Advanced seen from above, a ball cockpit lit like a sphere between bent
+// solar-panel wings, with a rear hull, red Sith trim, glowing ion engines,
+// and twin green laser bolts when it fires.
+const SITH = '#ff3b3b';
+const TIE_LASER = '#6dff6d';
 export function drawShip(ctx, ship) {
-  const now = typeof performance === 'undefined' ? Date.now() : performance.now();
   const glow = (color, blur) => { ctx.shadowColor = color; ctx.shadowBlur = blur; };
+  const [lx, ly] = localLight(ship.a);
+  const lw = 1;
   ctx.save();
   ctx.translate(ship.x, ship.y);
   ctx.rotate(ship.a);
-  ctx.scale(1.35, 1.35);
-  // ion exhaust: two flickering plasma cones and rings drifting off behind
-  for (const ey of [-4, 4]) {
-    const f = 9 + Math.random() * 9;
+  ctx.scale(1.5, 1.5);
+  const bar = (pts, reach = 8) => {
+    shape(ctx, pts);
+    ctx.fillStyle = metal(ctx, ship.a, reach, '#c4ccd6', '#14181e');
+    ctx.fill();
+    stroke(ctx, 'rgba(255,255,255,0.6)', lw * 0.8);
+  };
+  // ion exhaust out the back of the rear hull
+  for (const ey of [-1.6, 1.6]) {
+    const f = 4 + Math.random() * 5;
     ctx.beginPath();
-    ctx.moveTo(-12, ey - 2.2); ctx.lineTo(-12 - f, ey); ctx.lineTo(-12, ey + 2.2);
-    glow(RESUMED, 10);
-    stroke(ctx, RESUMED, 1.2);
-    ctx.beginPath();
-    ctx.moveTo(-12, ey - 1); ctx.lineTo(-12 - f * 0.55, ey); ctx.lineTo(-12, ey + 1);
-    stroke(ctx, INK, 0.8);
-    for (let i = 0; i < 2; i++) {
-      const k = ((now / 450) + i / 2) % 1;
-      ctx.beginPath();
-      ctx.ellipse(-14 - k * 16, ey, 0.8, 2.4 * (1 - k * 0.5), 0, 0, Math.PI * 2);
-      const prev = ctx.globalAlpha;
-      ctx.globalAlpha = prev * (1 - k);
-      stroke(ctx, RESUMED, 0.7);
-      ctx.globalAlpha = prev;
-    }
+    ctx.moveTo(-11, ey - 0.9); ctx.lineTo(-11 - f, ey); ctx.lineTo(-11, ey + 0.9);
+    glow(SITH, 8);
+    stroke(ctx, SITH, 1);
   }
-  // hull: needle nose, swept delta wings, notched tail; neon edge glow
-  const hull = [[28, 0], [12, -3], [3, -6], [-7, -19], [-13, -21], [-10, -7], [-13, -5], [-13, 5], [-10, 7], [-13, 21], [-7, 19], [3, 6], [12, 3]];
-  poly(ctx, hull, 0, 0);
-  ctx.fillStyle = 'rgba(79,216,255,0.07)';
-  ctx.fill();
-  glow(NEW, 8);
-  stroke(ctx, NEW, 1.3);
   ctx.shadowBlur = 0;
-  // panel lines: spine, wing roots, leading-edge strakes
+  bar([[-3, -4], [-11, -3], [-11, 3], [-3, 4]]); // the rear hull
+  for (const m of [1, -1]) bar([[1.4, 3 * m], [1.4, 7 * m], [-1.4, 7 * m], [-1.4, 3 * m]]); // struts
+  // the bent wings: dark solar cells, metal frame, spokes, red trim
+  for (const m of [1, -1]) {
+    const p = [[-5, 6], [5, 6], [8, 11], [4, 18], [-4, 18], [-8, 11]].map(([px, py]) => [px, py * m]);
+    const cx = 0, cy = 12.3 * m;
+    shape(ctx, p);
+    ctx.fillStyle = metal(ctx, ship.a, 20, '#3f4754', '#05070a');
+    ctx.fill();
+    stroke(ctx, 'rgba(255,255,255,0.65)', lw);
+    ctx.beginPath();
+    for (const [px, py] of p) { ctx.moveTo(cx, cy); ctx.lineTo(px, py); }
+    stroke(ctx, 'rgba(255,255,255,0.16)', lw * 0.6);
+    shape(ctx, p.map(([px, py]) => [cx + (px - cx) * 0.72, cy + (py - cy) * 0.72]));
+    stroke(ctx, SITH, lw * 0.7);
+  }
+  // the ball cockpit, lit like a sphere, with its octagonal window up front
+  const br = 5.6;
   ctx.beginPath();
-  ctx.moveTo(-10, 0); ctx.lineTo(3, 0);
-  ctx.moveTo(1, -5); ctx.lineTo(-6, -14); ctx.moveTo(1, 5); ctx.lineTo(-6, 14);
-  ctx.moveTo(-9, -6); ctx.lineTo(-9, 6);
-  stroke(ctx, DIM, 0.7);
-  // forward canards
-  ctx.beginPath();
-  ctx.moveTo(14, -2.6); ctx.lineTo(9, -8); ctx.lineTo(7, -4.2);
-  ctx.moveTo(14, 2.6); ctx.lineTo(9, 8); ctx.lineTo(7, 4.2);
-  stroke(ctx, INK, 0.9);
-  // canopy: a lit teardrop
-  ctx.beginPath();
-  ctx.ellipse(8, 0, 6, 2.3, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(125,255,176,0.35)';
+  ctx.arc(0, 0, br, 0, Math.PI * 2);
+  const g = ctx.createRadialGradient(lx * br * 0.5, ly * br * 0.5, br * 0.1, 0, 0, br);
+  g.addColorStop(0, '#e2e7ed');
+  g.addColorStop(0.6, '#5f6874');
+  g.addColorStop(1, '#0d1014');
+  ctx.fillStyle = g;
   ctx.fill();
-  glow(GW, 6);
-  stroke(ctx, GW, 1);
-  // wingtip pods with blinking nav lights (red port, green starboard)
-  const blink = Math.sin(now / 180) > 0.2;
-  for (const [py, color] of [[-20, RED], [20, ALIEN]]) {
-    ctx.beginPath();
-    ctx.moveTo(-13, py); ctx.lineTo(-3, py);
-    glow(NEW, 0);
-    stroke(ctx, INK, 1.1);
-    ctx.beginPath();
-    ctx.arc(-3, py, blink ? 1.7 : 1, 0, Math.PI * 2);
-    glow(color, blink ? 8 : 0);
-    ctx.fillStyle = color;
-    ctx.fill();
+  stroke(ctx, 'rgba(255,255,255,0.6)', lw);
+  const wx = br * 0.42, wr = br * 0.5;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    i ? ctx.lineTo(wx + Math.cos(a) * wr, Math.sin(a) * wr) : ctx.moveTo(wx + Math.cos(a) * wr, Math.sin(a) * wr);
   }
-  // twin engine cores
-  for (const ey of [-4, 4]) {
-    ctx.beginPath();
-    ctx.arc(-12, ey, 1.6, 0, Math.PI * 2);
-    glow(RESUMED, 6);
-    ctx.fillStyle = RESUMED;
-    ctx.fill();
+  ctx.closePath();
+  ctx.fillStyle = '#12060a';
+  ctx.fill();
+  glow(SITH, 6);
+  stroke(ctx, SITH, 0.9);
+  ctx.shadowBlur = 0;
+  ctx.beginPath();
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI;
+    ctx.moveTo(wx - Math.cos(a) * wr * 0.9, -Math.sin(a) * wr * 0.9);
+    ctx.lineTo(wx + Math.cos(a) * wr * 0.9, Math.sin(a) * wr * 0.9);
   }
-  // firing: plasma bolts from both wingtips and a muzzle flare at the nose
+  stroke(ctx, 'rgba(255,255,255,0.25)', 0.5);
+  // firing: twin green bolts from the cannons under the cockpit
   if (ship.flash > 0) {
-    glow(RED, 10);
+    glow(TIE_LASER, 10);
     ctx.beginPath();
-    ctx.moveTo(-1, -20); ctx.lineTo(16, -20); ctx.moveTo(-1, 20); ctx.lineTo(16, 20);
-    ctx.moveTo(28, 0); ctx.lineTo(38, 0);
-    stroke(ctx, RED, 1.6);
-    ctx.beginPath();
-    ctx.arc(29, 0, 2.2, 0, Math.PI * 2);
-    ctx.fillStyle = INK;
-    ctx.fill();
+    for (const py of [-2.2, 2.2]) { ctx.moveTo(6, py); ctx.lineTo(24, py); }
+    stroke(ctx, TIE_LASER, 1.6);
   }
+  ctx.shadowBlur = 0;
   ctx.restore();
 }
 

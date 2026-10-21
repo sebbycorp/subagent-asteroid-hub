@@ -34,11 +34,11 @@ test('schedule after a quiet spell is not penalised by an old gap', () => {
   assert.equal(schedule(q, { seq: 2 }, 60000), 60000 + DELAY_MS);
 });
 
-test('scouts are starfighters in four designs, each actor always the same one', async () => {
+test('scouts are Rebel ships (X-, Y-, A-wing and the Falcon), each actor always the same one', async () => {
   const { scoutKind, scoutOutline } = await import('./show.mjs');
   const uids = Array.from({ length: 60 }, (_, i) => `uid-${i}-${i * 7919}`);
   const kinds = new Set(uids.map(scoutKind));
-  assert.deepEqual([...kinds].sort(), ['awing', 'bwing', 'xwing', 'ywing']);
+  assert.deepEqual([...kinds].sort(), ['awing', 'falcon', 'xwing', 'ywing']);
   const outlines = [...kinds].map((k) => JSON.stringify(scoutOutline(k)));
   assert.equal(new Set(outlines).size, 4, 'each design has its own silhouette');
   for (const k of kinds) {
@@ -53,7 +53,7 @@ test('scouts are starfighters in four designs, each actor always the same one', 
   }
 });
 
-test('fighters turn to face their flight path, the short way round', async () => {
+test('ships turn to face their flight path, the short way round', async () => {
   const { steer } = await import('./show.mjs');
   let rot = 0;
   for (let i = 0; i < 200; i++) rot = steer(rot, 0, 10, 1 / 60);
