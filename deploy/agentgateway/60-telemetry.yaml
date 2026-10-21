@@ -1,0 +1,23 @@
+# agentgateway reports every request it handles to the show (OTLP/HTTP access
+# logs), tagged with the calling agent, so a shield only ever appears for a
+# request the gateway really handled. The app container joins the kind
+# network as substrate-asteroids (make run).
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: asteroids-telemetry
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: agentgateway-proxy
+  frontend:
+    accessLog:
+      otlp:
+        protocol: HTTP
+        url: http://substrate-asteroids:7790/v1/logs
+        attributes:
+          add:
+            - name: asteroids.agent
+              expression: 'request.headers["x-asteroids-agent"]'

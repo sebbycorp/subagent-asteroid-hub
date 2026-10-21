@@ -1,0 +1,37 @@
+# Your Qwen (qwen3:8b on Ollama on this Mac), reached through agentgateway.
+# Ollama stays bound to 127.0.0.1; the ollama-relay container on the kind
+# network forwards to it and presents Host: localhost, which Ollama's
+# DNS-rebinding guard requires (deploy/agentgateway/ollama-relay.conf).
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: qwen
+  namespace: agentgateway-system
+spec:
+  ai:
+    provider:
+      host: ollama-relay
+      port: 11434
+      path: /v1/chat/completions
+      openai:
+        model: qwen3:8b
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qwen
+  namespace: agentgateway-system
+spec:
+  parentRefs:
+    - name: agentgateway-proxy
+      namespace: agentgateway-system
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /qwen
+      backendRefs:
+        - name: qwen
+          namespace: agentgateway-system
+          group: agentgateway.dev
+          kind: AgentgatewayBackend

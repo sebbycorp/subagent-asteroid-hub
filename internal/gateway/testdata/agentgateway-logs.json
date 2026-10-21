@@ -1,0 +1,1266 @@
+{
+ "resourceLogs": [
+  {
+   "scopeLogs": [
+    {
+     "logRecords": [
+      {
+       "observedTimeUnixNano": "1792546570552266375",
+       "severityNumber": "SEVERITY_NUMBER_INFO",
+       "severityText": "INFO",
+       "attributes": [
+        {
+         "key": "gateway",
+         "value": {
+          "stringValue": "agentgateway-system/agentgateway-proxy"
+         }
+        },
+        {
+         "key": "listener",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "route",
+         "value": {
+          "stringValue": "agentgateway-system/kagent-a2a"
+         }
+        },
+        {
+         "key": "endpoint",
+         "value": {
+          "stringValue": "10.244.0.23:8083"
+         }
+        },
+        {
+         "key": "client.address",
+         "value": {
+          "stringValue": "127.0.0.1"
+         }
+        },
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "localhost"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/grpc.health.v1.Health/Check"
+         }
+        },
+        {
+         "key": "network.protocol.version",
+         "value": {
+          "stringValue": "2"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "grpc.status",
+         "value": {
+          "intValue": "0"
+         }
+        },
+        {
+         "key": "protocol",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "duration",
+         "value": {
+          "stringValue": "2ms"
+         }
+        },
+        {
+         "key": "url.scheme",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "server.port",
+         "value": {
+          "intValue": "8090"
+         }
+        }
+       ]
+      },
+      {
+       "observedTimeUnixNano": "1792546570559668666",
+       "severityNumber": "SEVERITY_NUMBER_INFO",
+       "severityText": "INFO",
+       "attributes": [
+        {
+         "key": "gateway",
+         "value": {
+          "stringValue": "agentgateway-system/agentgateway-proxy"
+         }
+        },
+        {
+         "key": "listener",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "route",
+         "value": {
+          "stringValue": "agentgateway-system/kagent-a2a"
+         }
+        },
+        {
+         "key": "endpoint",
+         "value": {
+          "stringValue": "10.244.0.23:8083"
+         }
+        },
+        {
+         "key": "client.address",
+         "value": {
+          "stringValue": "127.0.0.1"
+         }
+        },
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "localhost"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/kagent.api.v1.SessionService/GetSession"
+         }
+        },
+        {
+         "key": "network.protocol.version",
+         "value": {
+          "stringValue": "2"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "grpc.status",
+         "value": {
+          "intValue": "0"
+         }
+        },
+        {
+         "key": "protocol",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "duration",
+         "value": {
+          "stringValue": "1ms"
+         }
+        },
+        {
+         "key": "url.scheme",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "server.port",
+         "value": {
+          "intValue": "8090"
+         }
+        }
+       ]
+      },
+      {
+       "observedTimeUnixNano": "1792546570974605916",
+       "severityNumber": "SEVERITY_NUMBER_INFO",
+       "severityText": "INFO",
+       "attributes": [
+        {
+         "key": "gateway",
+         "value": {
+          "stringValue": "agentgateway-system/agentgateway-proxy"
+         }
+        },
+        {
+         "key": "listener",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "route",
+         "value": {
+          "stringValue": "agentgateway-system/kagent-tools"
+         }
+        },
+        {
+         "key": "client.address",
+         "value": {
+          "stringValue": "10.244.0.17"
+         }
+        },
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "agentgateway-proxy.agentgateway-system.svc.cluster.local"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/mcp/kagent-tools"
+         }
+        },
+        {
+         "key": "network.protocol.version",
+         "value": {
+          "stringValue": "1.1"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "protocol",
+         "value": {
+          "stringValue": "mcp"
+         }
+        },
+        {
+         "key": "mcp.method.name",
+         "value": {
+          "stringValue": "server/discover"
+         }
+        },
+        {
+         "key": "duration",
+         "value": {
+          "stringValue": "3ms"
+         }
+        },
+        {
+         "key": "url.scheme",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "asteroids.agent",
+         "value": {
+          "stringValue": "asteroids-demo-poet"
+         }
+        }
+       ]
+      },
+      {
+       "observedTimeUnixNano": "1792546571053872958",
+       "severityNumber": "SEVERITY_NUMBER_INFO",
+       "severityText": "INFO",
+       "attributes": [
+        {
+         "key": "gateway",
+         "value": {
+          "stringValue": "agentgateway-system/agentgateway-proxy"
+         }
+        },
+        {
+         "key": "listener",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "route",
+         "value": {
+          "stringValue": "agentgateway-system/kagent-tools"
+         }
+        },
+        {
+         "key": "client.address",
+         "value": {
+          "stringValue": "10.244.0.17"
+         }
+        },
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "agentgateway-proxy.agentgateway-system.svc.cluster.local"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/mcp/kagent-tools"
+         }
+        },
+        {
+         "key": "network.protocol.version",
+         "value": {
+          "stringValue": "1.1"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "protocol",
+         "value": {
+          "stringValue": "mcp"
+         }
+        },
+        {
+         "key": "mcp.method.name",
+         "value": {
+          "stringValue": "initialize"
+         }
+        },
+        {
+         "key": "mcp.session.id",
+         "value": {
+          "stringValue": "redacted-session"
+         }
+        },
+        {
+         "key": "duration",
+         "value": {
+          "stringValue": "5ms"
+         }
+        },
+        {
+         "key": "url.scheme",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "asteroids.agent",
+         "value": {
+          "stringValue": "asteroids-demo-poet"
+         }
+        }
+       ]
+      },
+      {
+       "observedTimeUnixNano": "1792546571064181500",
+       "severityNumber": "SEVERITY_NUMBER_INFO",
+       "severityText": "INFO",
+       "attributes": [
+        {
+         "key": "gateway",
+         "value": {
+          "stringValue": "agentgateway-system/agentgateway-proxy"
+         }
+        },
+        {
+         "key": "listener",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "route",
+         "value": {
+          "stringValue": "agentgateway-system/kagent-tools"
+         }
+        },
+        {
+         "key": "client.address",
+         "value": {
+          "stringValue": "10.244.0.17"
+         }
+        },
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "agentgateway-proxy.agentgateway-system.svc.cluster.local"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/mcp/kagent-tools"
+         }
+        },
+        {
+         "key": "network.protocol.version",
+         "value": {
+          "stringValue": "1.1"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "202"
+         }
+        },
+        {
+         "key": "protocol",
+         "value": {
+          "stringValue": "mcp"
+         }
+        },
+        {
+         "key": "mcp.method.name",
+         "value": {
+          "stringValue": "notifications/initialized"
+         }
+        },
+        {
+         "key": "mcp.session.id",
+         "value": {
+          "stringValue": "redacted-session"
+         }
+        },
+        {
+         "key": "duration",
+         "value": {
+          "stringValue": "0ms"
+         }
+        },
+        {
+         "key": "url.scheme",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "asteroids.agent",
+         "value": {
+          "stringValue": "asteroids-demo-poet"
+         }
+        }
+       ]
+      },
+      {
+       "observedTimeUnixNano": "1792546571075979166",
+       "severityNumber": "SEVERITY_NUMBER_INFO",
+       "severityText": "INFO",
+       "attributes": [
+        {
+         "key": "gateway",
+         "value": {
+          "stringValue": "agentgateway-system/agentgateway-proxy"
+         }
+        },
+        {
+         "key": "listener",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "route",
+         "value": {
+          "stringValue": "agentgateway-system/kagent-tools"
+         }
+        },
+        {
+         "key": "client.address",
+         "value": {
+          "stringValue": "10.244.0.17"
+         }
+        },
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "agentgateway-proxy.agentgateway-system.svc.cluster.local"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/mcp/kagent-tools"
+         }
+        },
+        {
+         "key": "network.protocol.version",
+         "value": {
+          "stringValue": "1.1"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "protocol",
+         "value": {
+          "stringValue": "mcp"
+         }
+        },
+        {
+         "key": "mcp.method.name",
+         "value": {
+          "stringValue": "tools/list"
+         }
+        },
+        {
+         "key": "mcp.session.id",
+         "value": {
+          "stringValue": "redacted-session"
+         }
+        },
+        {
+         "key": "duration",
+         "value": {
+          "stringValue": "9ms"
+         }
+        },
+        {
+         "key": "url.scheme",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "asteroids.agent",
+         "value": {
+          "stringValue": "asteroids-demo-poet"
+         }
+        }
+       ]
+      },
+      {
+       "observedTimeUnixNano": "1792546572873544417",
+       "severityNumber": "SEVERITY_NUMBER_INFO",
+       "severityText": "INFO",
+       "attributes": [
+        {
+         "key": "gateway",
+         "value": {
+          "stringValue": "agentgateway-system/agentgateway-proxy"
+         }
+        },
+        {
+         "key": "listener",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "route",
+         "value": {
+          "stringValue": "agentgateway-system/qwen"
+         }
+        },
+        {
+         "key": "endpoint",
+         "value": {
+          "stringValue": "ollama-relay:11434"
+         }
+        },
+        {
+         "key": "client.address",
+         "value": {
+          "stringValue": "10.244.0.17"
+         }
+        },
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "agentgateway-proxy.agentgateway-system.svc.cluster.local"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/qwen/v1/chat/completions"
+         }
+        },
+        {
+         "key": "network.protocol.version",
+         "value": {
+          "stringValue": "1.1"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "protocol",
+         "value": {
+          "stringValue": "llm"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.provider.name",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "gen_ai.request.model",
+         "value": {
+          "stringValue": "qwen3:8b"
+         }
+        },
+        {
+         "key": "gen_ai.response.model",
+         "value": {
+          "stringValue": "qwen3:8b"
+         }
+        },
+        {
+         "key": "gen_ai.usage.input_tokens",
+         "value": {
+          "intValue": "571"
+         }
+        },
+        {
+         "key": "gen_ai.usage.output_tokens",
+         "value": {
+          "intValue": "37"
+         }
+        },
+        {
+         "key": "agw.ai.time_to_first_token",
+         "value": {
+          "doubleValue": 1.738571501
+         }
+        },
+        {
+         "key": "agw.ai.time_per_output_token",
+         "value": {
+          "doubleValue": 0.000991048
+         }
+        },
+        {
+         "key": "duration",
+         "value": {
+          "stringValue": "1775ms"
+         }
+        },
+        {
+         "key": "url.scheme",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "asteroids.agent",
+         "value": {
+          "stringValue": "asteroids-demo-poet"
+         }
+        }
+       ]
+      },
+      {
+       "observedTimeUnixNano": "1792546572934968792",
+       "severityNumber": "SEVERITY_NUMBER_INFO",
+       "severityText": "INFO",
+       "attributes": [
+        {
+         "key": "gateway",
+         "value": {
+          "stringValue": "agentgateway-system/agentgateway-proxy"
+         }
+        },
+        {
+         "key": "listener",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "route",
+         "value": {
+          "stringValue": "agentgateway-system/kagent-tools"
+         }
+        },
+        {
+         "key": "client.address",
+         "value": {
+          "stringValue": "10.244.0.17"
+         }
+        },
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "agentgateway-proxy.agentgateway-system.svc.cluster.local"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/mcp/kagent-tools"
+         }
+        },
+        {
+         "key": "network.protocol.version",
+         "value": {
+          "stringValue": "1.1"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "protocol",
+         "value": {
+          "stringValue": "mcp"
+         }
+        },
+        {
+         "key": "mcp.method.name",
+         "value": {
+          "stringValue": "tools/call"
+         }
+        },
+        {
+         "key": "mcp.target",
+         "value": {
+          "stringValue": "kagent-tools"
+         }
+        },
+        {
+         "key": "mcp.resource.type",
+         "value": {
+          "stringValue": "tool"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "k8s_get_resources"
+         }
+        },
+        {
+         "key": "mcp.session.id",
+         "value": {
+          "stringValue": "redacted-session"
+         }
+        },
+        {
+         "key": "duration",
+         "value": {
+          "stringValue": "54ms"
+         }
+        },
+        {
+         "key": "url.scheme",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "asteroids.agent",
+         "value": {
+          "stringValue": "asteroids-demo-poet"
+         }
+        }
+       ]
+      },
+      {
+       "observedTimeUnixNano": "1792546572952590751",
+       "severityNumber": "SEVERITY_NUMBER_INFO",
+       "severityText": "INFO",
+       "attributes": [
+        {
+         "key": "gateway",
+         "value": {
+          "stringValue": "agentgateway-system/agentgateway-proxy"
+         }
+        },
+        {
+         "key": "listener",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "route",
+         "value": {
+          "stringValue": "agentgateway-system/kagent-tools"
+         }
+        },
+        {
+         "key": "client.address",
+         "value": {
+          "stringValue": "10.244.0.17"
+         }
+        },
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "agentgateway-proxy.agentgateway-system.svc.cluster.local"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/mcp/kagent-tools"
+         }
+        },
+        {
+         "key": "network.protocol.version",
+         "value": {
+          "stringValue": "1.1"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "protocol",
+         "value": {
+          "stringValue": "mcp"
+         }
+        },
+        {
+         "key": "mcp.method.name",
+         "value": {
+          "stringValue": "tools/list"
+         }
+        },
+        {
+         "key": "mcp.session.id",
+         "value": {
+          "stringValue": "redacted-session"
+         }
+        },
+        {
+         "key": "duration",
+         "value": {
+          "stringValue": "11ms"
+         }
+        },
+        {
+         "key": "url.scheme",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "asteroids.agent",
+         "value": {
+          "stringValue": "asteroids-demo-poet"
+         }
+        }
+       ]
+      },
+      {
+       "observedTimeUnixNano": "1792546577281539544",
+       "severityNumber": "SEVERITY_NUMBER_INFO",
+       "severityText": "INFO",
+       "attributes": [
+        {
+         "key": "gateway",
+         "value": {
+          "stringValue": "agentgateway-system/agentgateway-proxy"
+         }
+        },
+        {
+         "key": "listener",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "route",
+         "value": {
+          "stringValue": "agentgateway-system/qwen"
+         }
+        },
+        {
+         "key": "endpoint",
+         "value": {
+          "stringValue": "ollama-relay:11434"
+         }
+        },
+        {
+         "key": "client.address",
+         "value": {
+          "stringValue": "10.244.0.17"
+         }
+        },
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "agentgateway-proxy.agentgateway-system.svc.cluster.local"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/qwen/v1/chat/completions"
+         }
+        },
+        {
+         "key": "network.protocol.version",
+         "value": {
+          "stringValue": "1.1"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "protocol",
+         "value": {
+          "stringValue": "llm"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.provider.name",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "gen_ai.request.model",
+         "value": {
+          "stringValue": "qwen3:8b"
+         }
+        },
+        {
+         "key": "gen_ai.response.model",
+         "value": {
+          "stringValue": "qwen3:8b"
+         }
+        },
+        {
+         "key": "gen_ai.usage.input_tokens",
+         "value": {
+          "intValue": "2556"
+         }
+        },
+        {
+         "key": "gen_ai.usage.output_tokens",
+         "value": {
+          "intValue": "9"
+         }
+        },
+        {
+         "key": "agw.ai.time_to_first_token",
+         "value": {
+          "doubleValue": 3.071540834
+         }
+        },
+        {
+         "key": "agw.ai.time_per_output_token",
+         "value": {
+          "doubleValue": 0.138826273
+         }
+        },
+        {
+         "key": "duration",
+         "value": {
+          "stringValue": "4320ms"
+         }
+        },
+        {
+         "key": "url.scheme",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "asteroids.agent",
+         "value": {
+          "stringValue": "asteroids-demo-poet"
+         }
+        }
+       ]
+      },
+      {
+       "observedTimeUnixNano": "1792546577300730711",
+       "severityNumber": "SEVERITY_NUMBER_INFO",
+       "severityText": "INFO",
+       "attributes": [
+        {
+         "key": "gateway",
+         "value": {
+          "stringValue": "agentgateway-system/agentgateway-proxy"
+         }
+        },
+        {
+         "key": "listener",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "route",
+         "value": {
+          "stringValue": "agentgateway-system/kagent-a2a"
+         }
+        },
+        {
+         "key": "endpoint",
+         "value": {
+          "stringValue": "10.244.0.23:8083"
+         }
+        },
+        {
+         "key": "client.address",
+         "value": {
+          "stringValue": "127.0.0.1"
+         }
+        },
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "localhost"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/lf.a2a.v1.A2AService/SendMessage"
+         }
+        },
+        {
+         "key": "network.protocol.version",
+         "value": {
+          "stringValue": "2"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "grpc.status",
+         "value": {
+          "intValue": "0"
+         }
+        },
+        {
+         "key": "protocol",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "duration",
+         "value": {
+          "stringValue": "6739ms"
+         }
+        },
+        {
+         "key": "url.scheme",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "server.port",
+         "value": {
+          "intValue": "8090"
+         }
+        }
+       ]
+      },
+      {
+       "observedTimeUnixNano": "1792546577303833753",
+       "severityNumber": "SEVERITY_NUMBER_INFO",
+       "severityText": "INFO",
+       "attributes": [
+        {
+         "key": "gateway",
+         "value": {
+          "stringValue": "agentgateway-system/agentgateway-proxy"
+         }
+        },
+        {
+         "key": "listener",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "route",
+         "value": {
+          "stringValue": "agentgateway-system/kagent-tools"
+         }
+        },
+        {
+         "key": "client.address",
+         "value": {
+          "stringValue": "10.244.0.17"
+         }
+        },
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "GET"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "agentgateway-proxy.agentgateway-system.svc.cluster.local"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/mcp/kagent-tools"
+         }
+        },
+        {
+         "key": "network.protocol.version",
+         "value": {
+          "stringValue": "1.1"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "protocol",
+         "value": {
+          "stringValue": "mcp"
+         }
+        },
+        {
+         "key": "mcp.session.id",
+         "value": {
+          "stringValue": "redacted-session"
+         }
+        },
+        {
+         "key": "duration",
+         "value": {
+          "stringValue": "6245ms"
+         }
+        },
+        {
+         "key": "url.scheme",
+         "value": {
+          "stringValue": "http"
+         }
+        },
+        {
+         "key": "asteroids.agent",
+         "value": {
+          "stringValue": "asteroids-demo-poet"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

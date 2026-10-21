@@ -2,10 +2,18 @@ package server
 
 import (
 	"bufio"
+	"bytes"
+	"os"
+
+	collogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/sebbycorp/subagent-asteroid-hub/internal/gateway"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -298,5 +306,28 @@ func TestServerTourActions(t *testing.T) {
 	r.tour.err = errors.New("the tour is still running this chapter")
 	if resp, body := post(t, r.srv.URL+"/api/tour", `{"action":"next"}`); resp.StatusCode != 409 || !strings.Contains(body, "still running") {
 		t.Fatalf("busy: %d %s", resp.StatusCode, body)
+	}
+}
+
+type gwSink struct{ evs []gateway.Event }
+
+func TestServerReceivesGatewayLogs(t *testing.T) {
+	var sink gwSink
+	h := hub.New(emptySource{}, "env")
+	srv := httptest.NewServer(New(h, &fakeWaves{}, &fakeTour{}, func(ConnInfo) error { return nil },
+		fstest.MapFS{"index.html": {Data: []byte("x")}}, ConnInfo{}, WithGatewaySink(func(evs []gateway.Event) { sink.evs = append(sink.evs, evs...) })))
+	defer srv.Close()
+	b, _ := os.ReadFile("../gateway/testdata/agentgateway-logs.json")
+	var req collogs.ExportLogsServiceRequest
+	if err := protojson.Unmarshal(b, &req); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := proto.Marshal(&req)
+	resp, err := http.Post(srv.URL+"/v1/logs", "application/x-protobuf", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 || len(sink.evs) == 0 {
+		t.Fatalf("status %d events %d", resp.StatusCode, len(sink.evs))
 	}
 }

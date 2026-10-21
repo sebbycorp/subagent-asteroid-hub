@@ -56,6 +56,8 @@ const (
 	codeWord = "ORION"
 	teach    = "Remember: the code word is ORION. Reply only OK."
 	ask      = "What was the code word? Reply with just the word."
+
+	gatewayQuestion = "How many pods are running in the kagent namespace? Use your Kubernetes tools, then answer in one short sentence."
 )
 
 type chapter struct {
@@ -90,6 +92,12 @@ var chapters = []chapter{
 		"LIKE THE ASTEROID SPLITTING IN TWO. NOBODY TOLD THE",
 		"FORK THE CODE WORD. DOES IT KNOW?",
 	}, (*Tour).runFork},
+	{"gateway", "AGENTGATEWAY: THE AGENT HOLDS NO KEYS", []string{
+		"WE ASK THE AGENT ABOUT THE CLUSTER. TO ANSWER, IT CALLS ITS",
+		"MODEL AND A KUBERNETES TOOL. BOTH CALLS LEAVE THE SANDBOX",
+		"THROUGH AGENTGATEWAY: SUBSTRATE ONLY LETS IT REACH THE",
+		"GATEWAY, AND THE GATEWAY HOLDS THE CREDENTIALS. WATCH THE SHIELD.",
+	}, (*Tour).runGateway},
 	{"density", "DENSITY: MANY AGENTS, FEW MACHINES", []string{
 		"NOW A WAVE OF CHATS ACROSS EVERY AGENT.",
 		"A SESSION HOLDS A WORKER ONLY WHILE IT IS THINKING;",
@@ -356,6 +364,20 @@ func (t *Tour) runFork(ctx context.Context) error {
 		result += ". IT INHERITED THE MEMORY."
 	}
 	t.update(func(s *Status) { s.Result = result })
+	return nil
+}
+
+func (t *Tour) runGateway(ctx context.Context) error {
+	id, err := t.needSession()
+	if err != nil {
+		return err
+	}
+	t.doing(`ASKING: "HOW MANY PODS RUN IN THE KAGENT NAMESPACE?"`)
+	res, err := t.chat(ctx, id, gatewayQuestion)
+	if err != nil {
+		return err
+	}
+	t.update(func(s *Status) { s.Result = "IT ANSWERED: " + quote(res.Reply) })
 	return nil
 }
 

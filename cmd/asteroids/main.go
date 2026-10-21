@@ -90,7 +90,7 @@ func main() {
 	go h.Run(ctx, 250*time.Millisecond)
 	go gen.Run(ctx)
 
-	srv := &http.Server{Addr: cfg.Listen, Handler: server.New(h, gen, guide, connect, web.Files, conn)}
+	srv := &http.Server{Addr: cfg.Listen, Handler: server.New(h, gen, guide, connect, web.Files, conn, server.WithGatewaySink(h.Gateway))}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)

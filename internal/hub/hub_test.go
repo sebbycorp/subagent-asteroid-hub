@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sebbycorp/subagent-asteroid-hub/internal/gateway"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/model"
 )
 
@@ -351,5 +352,37 @@ func TestHubColdStartIsNotARestore(t *testing.T) {
 	}
 	if h.State().Stats.LastRestoreMS != nil {
 		t.Fatalf("cold start counted as restore: %+v", h.State().Stats)
+	}
+}
+
+func TestHubGatewayEventsBroadcastAndCount(t *testing.T) {
+	h := New(src(ok(0)), "env")
+	ch, cancel := h.Subscribe()
+	defer cancel()
+	drain(ch)
+	h.Gateway([]gateway.Event{
+		{Kind: "llm", Direction: "egress", Agent: "poet", Target: "qwen"},
+		{Kind: "tool", Direction: "egress", Agent: "poet", Target: "kagent-tools", Tool: "k8s_get_resources"},
+		{Kind: "chat", Direction: "ingress", Target: "kagent-a2a"},
+	})
+	var gw int
+	for b := range len(ch) {
+		_ = b
+		m := <-ch
+		var msg struct {
+			Type    string        `json:"type"`
+			Gateway gateway.Event `json:"gateway"`
+		}
+		json.Unmarshal(m, &msg)
+		if msg.Type == "gateway" {
+			gw++
+		}
+	}
+	if gw != 3 {
+		t.Fatalf("gateway messages %d", gw)
+	}
+	g := h.State().Gateway
+	if !g.Seen || g.LLM != 1 || g.Tools != 1 || g.Chats != 1 {
+		t.Fatalf("gateway stats %+v", g)
 	}
 }

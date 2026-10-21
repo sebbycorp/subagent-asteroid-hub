@@ -134,7 +134,7 @@ func (r *rig) step(t *testing.T, f func(context.Context) error) Status {
 func TestTourWalksAllChapters(t *testing.T) {
 	r := newRig()
 	st := r.step(t, r.t.Start)
-	if !st.Active || st.Chapter != 1 || st.Total != 5 || len(st.Focus) != 1 || st.Focus[0] != "s1" {
+	if !st.Active || st.Chapter != 1 || st.Total != 6 || len(st.Focus) != 1 || st.Focus[0] != "s1" {
 		t.Fatalf("chapter 1: %+v", st)
 	}
 	if !strings.Contains(st.Result, `"OK"`) {
@@ -162,9 +162,17 @@ func TestTourWalksAllChapters(t *testing.T) {
 		t.Fatalf("checkpoint not at the last turn: %v", r.c.calls)
 	}
 
-	st = r.step(t, r.t.Next) // 5: density wave
-	if st.Chapter != 5 || r.w.(*fakeWaves).n != 1 || !strings.Contains(st.Result, "3 CHATS") {
+	st = r.step(t, r.t.Next) // 5: agentgateway — a tool-using question on the tour session
+	if st.Chapter != 5 || st.Kind != "gateway" || len(st.Focus) != 1 || st.Focus[0] != "s1" || !strings.HasPrefix(st.Result, "IT ANSWERED: ") {
 		t.Fatalf("chapter 5: %+v", st)
+	}
+	if last := r.c.calls[len(r.c.calls)-1]; last != "chat s1" {
+		t.Fatalf("chapter 5 should chat the tour session, last call %q", last)
+	}
+
+	st = r.step(t, r.t.Next) // 6: density wave
+	if st.Chapter != 6 || r.w.(*fakeWaves).n != 1 || !strings.Contains(st.Result, "3 CHATS") {
+		t.Fatalf("chapter 6: %+v", st)
 	}
 
 	st = r.step(t, r.t.Next) // past the end: tour ends
@@ -174,7 +182,7 @@ func TestTourWalksAllChapters(t *testing.T) {
 	if fmt.Sprint(r.active) != "[true false]" {
 		t.Fatalf("OnActive calls %v", r.active)
 	}
-	if len(r.m.sent) != 3 || len(r.m.ended) != 3 {
+	if len(r.m.sent) != 4 || len(r.m.ended) != 4 {
 		t.Fatalf("marks sent %v ended %v", r.m.sent, r.m.ended)
 	}
 }
@@ -243,7 +251,7 @@ func TestTourDensitySingularChat(t *testing.T) {
 	r.w = &oneWave{}
 	r.t = New(r.c, r.w, r.m, Options{})
 	r.step(t, r.t.Start)
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 5; i++ {
 		r.step(t, r.t.Next)
 	}
 	if st := r.t.Status(); !strings.HasPrefix(st.Result, "1 CHAT SENT.") {

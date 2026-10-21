@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sebbycorp/subagent-asteroid-hub/internal/gateway"
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/model"
 )
 
@@ -34,6 +35,14 @@ type WaveStatus struct {
 	Note     string `json:"note,omitempty"`
 }
 
+// GatewayStats counts requests agentgateway reported.
+type GatewayStats struct {
+	Seen  bool  `json:"seen"` // agentgateway has reported at least once
+	LLM   int64 `json:"llm"`
+	Tools int64 `json:"tools"`
+	Chats int64 `json:"chats"`
+}
+
 // State is what the browser draws.
 type State struct {
 	Env       string         `json:"env"`
@@ -43,6 +52,7 @@ type State struct {
 	Stats     Stats          `json:"stats"`
 	Waves     WaveStatus     `json:"waves"`
 	Tour      any            `json:"tour,omitempty"` // the guided tour's card, when set
+	Gateway   GatewayStats   `json:"gateway"`
 }
 
 const subBuffer = 256
@@ -133,6 +143,27 @@ func (h *Hub) SetTour(t any) {
 	h.state.Tour = t
 	h.broadcastLocked(h.stateMsgLocked())
 	h.mu.Unlock()
+}
+
+// Gateway relays requests agentgateway handled, then the updated state.
+func (h *Hub) Gateway(evs []gateway.Event) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	g := &h.state.Gateway
+	g.Seen = true
+	for _, e := range evs {
+		switch e.Kind {
+		case "llm":
+			g.LLM++
+		case "tool":
+			g.Tools++
+		case "chat":
+			g.Chats++
+		}
+		b, _ := json.Marshal(map[string]any{"type": "gateway", "gateway": e})
+		h.broadcastLocked(b)
+	}
+	h.broadcastLocked(h.stateMsgLocked())
 }
 
 // State returns a copy of the current state.
