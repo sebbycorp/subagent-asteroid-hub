@@ -303,10 +303,39 @@ function drawFocus(ctx, world, now) {
 
 export const CARD = { x: 210, y: 150, w: 450 };
 
+// wrapPx splits text into lines no wider than width at the given style.
+function wrapPx(ctx, str, width, size, spacing) {
+  ctx.font = `${size}px ${FONT}`;
+  ctx.letterSpacing = `${spacing}px`;
+  const out = [];
+  let line = '';
+  for (const word of String(str).toUpperCase().split(/\s+/)) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(next).width > width) {
+      out.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) out.push(line);
+  return out;
+}
+
 function drawTourCard(ctx, tour, live, now) {
-  const lines = [];
-  const body = tour.body || [];
-  const h = 64 + body.length * 16 + 22 * 4;
+  const x = CARD.x + 18;
+  const inner = CARD.w - 36;
+  // lay out first (wrapped to the card), then size the card to fit
+  const rows = [];
+  const add = (str, size, spacing, color, gapAfter = 0) => {
+    for (const l of wrapPx(ctx, str, inner, size, spacing)) rows.push({ l, size, spacing, color, h: size + 6 });
+    if (gapAfter) rows.push({ l: '', h: gapAfter });
+  };
+  add(`TOUR ${tour.chapter}/${tour.total} · ${tour.title}`, 12, 2, INK, 8);
+  add((tour.body || []).join(' '), 10, 1, DIM, 10);
+  if (tour.doing) add(`${Math.floor(now / 400) % 2 ? '▸' : ' '} ${tour.doing}`, 11, 1, INK, 4);
+  if (tour.result) add(tour.result, 11, 1, INK, 4);
+  if (tour.error) add(tour.error, 11, 1, RED, 4);
+  if (live) add(live, 10, 1, GW, 4);
+  const h = 20 + rows.reduce((n, r) => n + r.h, 0) + 26;
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.86)';
   ctx.fillRect(CARD.x, CARD.y, CARD.w, h);
@@ -314,20 +343,11 @@ function drawTourCard(ctx, tour, live, now) {
   ctx.rect(CARD.x, CARD.y, CARD.w, h);
   stroke(ctx, INK, 1.5);
   ctx.restore();
-  let y = CARD.y + 26;
-  const x = CARD.x + 18;
-  text(ctx, `TOUR ${tour.chapter}/${tour.total} · ${tour.title}`, x, y, { size: 13, spacing: 2 });
-  y += 26;
-  for (const l of body) { text(ctx, l, x, y, { size: 10, spacing: 1, color: DIM }); y += 16; }
-  y += 10;
-  if (tour.doing) {
-    const dot = Math.floor(now / 400) % 2 ? '▸' : ' ';
-    text(ctx, `${dot} ${tour.doing}`, x, y, { size: 11, spacing: 1 });
-    y += 22;
+  let y = CARD.y + 24;
+  for (const r of rows) {
+    if (r.l) text(ctx, r.l, x, y, { size: r.size, spacing: r.spacing, color: r.color });
+    y += r.h;
   }
-  if (tour.result) { text(ctx, tour.result, x, y, { size: 11, spacing: 1 }); y += 22; }
-  if (tour.error) { text(ctx, tour.error.slice(0, 80), x, y, { size: 11, spacing: 1, color: RED }); y += 22; }
-  if (live) { text(ctx, live, x, y, { size: 10, spacing: 1, color: DIM }); y += 22; }
   text(ctx, tour.busy ? 'WORKING ON THE CLUSTER…' : tour.chapter >= tour.total ? 'N FINISH · ESC END TOUR' : 'N NEXT CHAPTER · ESC END TOUR',
     CARD.x + CARD.w - 18, CARD.y + h - 12, { size: 9, align: 'right', color: DIM });
 }
