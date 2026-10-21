@@ -36,18 +36,9 @@ export function muzzleAt(ship) {
 }
 
 // The cannon swings from just past straight up (CANNON_MIN) to just below
-// level (CANNON_MAX); it can't aim behind itself or into the ground.
+// level (CANNON_MAX).
 export const CANNON_MIN = -1.75;
 export const CANNON_MAX = 0.25;
-
-// cannonAim is the barrel angle to hit target from g, kept within the
-// cannon's swing: a target out of reach low and ahead gets its lowest angle,
-// anything behind it gets its highest.
-export function cannonAim(g, target) {
-  const a = Math.atan2(target.y - g.y, target.x - g.x);
-  if (a >= CANNON_MIN && a <= CANNON_MAX) return a;
-  return a > CANNON_MAX && a <= Math.PI / 2 ? CANNON_MAX : CANNON_MIN;
-}
 
 // moonAt is where the moon riding the planet's tilted ring is drawn at angle
 // a, and whether it shows: on the back half of its orbit it is hidden while
@@ -119,86 +110,14 @@ export function poly(ctx, pts, x, y, rot = 0, scale = 1) {
   ctx.closePath();
 }
 
-// The kagent worker-pool ship is drawn this much bigger than its base size.
-export const SAUCER_SCALE = 1.5;
-
-// saucerSpots places each worker pool's ship along the top; each glides side
-// to side over time.
-export function saucerSpots(pools, t = 0) {
-  const n = Math.max(pools.length, 1);
-  const span = FIELD.x1 - FIELD.x0;
-  const half = 70 * SAUCER_SCALE;
-  const amp = Math.max(0, Math.min(330, span / (2 * n) - half - 4));
-  return pools.map((p, i) => ({
-    pool: p,
-    x: FIELD.x0 + (span * (i + 1)) / (n + 1) + amp * Math.sin((t / 1000) * 0.12 + i * 1.7),
-    y: 96,
-  }));
-}
-
-// The kagent mark, drawn in the worker-pool ship's dome.
+// The kagent mark: the robot at the cannon and the human-in-the-loop pilot.
 const KAGENT = typeof Image === 'undefined' ? {} : Object.assign(new Image(), { src: 'kagent-mark.png' });
 
-// drawSaucer draws a worker pool as kagent's domed mothership: the kagent
-// robot in the dome, chasing rim lights, one porthole per worker (lit while
-// hosting an actor), and a tractor beam when it launches an asteroid.
-function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
-  const { x, y } = s;
-  const S = SAUCER_SCALE;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(S, S);
-  // tractor beam
-  const bk = (now - (beamAt ?? -1e9)) / 800;
-  if (bk >= 0 && bk < 1) {
-    const prev = ctx.globalAlpha;
-    ctx.globalAlpha = prev * (1 - bk) * 0.7;
-    ctx.beginPath();
-    ctx.moveTo(-16, 20); ctx.lineTo(-44, 70);
-    ctx.moveTo(16, 20); ctx.lineTo(44, 70);
-    for (let i = 1; i <= 5; i++) {
-      const t = ((i / 5 + bk * 2) % 1), yy = 20 + t * 50, w = 16 + t * 28;
-      ctx.moveTo(-w, yy); ctx.lineTo(w, yy);
-    }
-    stroke(ctx, NEW, 1 / S);
-    ctx.globalAlpha = prev;
-  }
-  // dome with the kagent robot inside
-  ctx.beginPath();
-  ctx.ellipse(0, -9, 22, 19, 0, Math.PI, 0);
-  stroke(ctx, INK, 1.4 / S);
-  if (KAGENT.complete && KAGENT.naturalWidth) ctx.drawImage(KAGENT, -11, -27, 22, 22);
-  // upper body, rim, skirt
-  ctx.beginPath();
-  ctx.ellipse(0, -4, 44, 9, 0, Math.PI, 0);
-  stroke(ctx, INK, 1.4 / S);
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 68, 11, 0, 0, Math.PI * 2);
-  stroke(ctx, INK, 1.6 / S);
-  ctx.beginPath();
-  ctx.moveTo(-48, 8); ctx.lineTo(-30, 19); ctx.lineTo(30, 19); ctx.lineTo(48, 8);
-  stroke(ctx, INK, 1.4 / S);
-  // chasing rim lights (front half bright)
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2 + now / 900;
-    ctx.beginPath();
-    ctx.arc(Math.cos(a) * 58, Math.sin(a) * 6, Math.sin(a) > 0 ? 1.4 : 0.9, 0, Math.PI * 2);
-    ctx.fillStyle = Math.sin(a) > 0 ? INK : DIM;
-    ctx.fill();
-  }
-  // portholes: one per worker
-  const workers = s.pool.workers || [];
-  const gap = 13;
-  workers.forEach((w, i) => {
-    const px = -((workers.length - 1) * gap) / 2 + i * gap;
-    ctx.beginPath();
-    ctx.arc(px, 13.5, 3.4, 0, Math.PI * 2);
-    if (busyWorkers.has(w)) { ctx.fillStyle = INK; ctx.fill(); }
-    stroke(ctx, INK, 1 / S);
-  });
-  ctx.restore();
-  text(ctx, s.pool.name, x, y + 42, { size: 10, align: 'center', spacing: 2 });
-  text(ctx, `KAGENT WORKER POOL · ${workers.length} WORKER${workers.length === 1 ? '' : 'S'}`, x, y + 54, { size: 7, align: 'center', color: DIM, spacing: 1 });
+// workerLights lists the lights on the cannon's platform: one per worker
+// across the worker pools (as many as fit), lit while hosting an actor.
+const MAX_LIGHTS = 8;
+export function workerLights(pools, busy) {
+  return pools.flatMap((p) => p.workers || []).slice(0, MAX_LIGHTS).map((w) => ({ worker: w, busy: busy.has(w) }));
 }
 
 export const ALIEN = '#9dff6b'; // the human-in-the-loop request
@@ -274,26 +193,16 @@ function drawPilot(ctx, x, y, now, ap) {
   text(ctx, lines[1], sx + 7, sy + 23, { size: 8, spacing: 1, color: INK });
 }
 
-// drawGunner draws the kagent robot in the bottom-left corner at the
-// controls of a neon rail cannon on a turret, all in vector lines. ship.a is
-// the barrel angle and ship.target (if any) gets a dotted red targeting
-// laser; ship.flash (1 → 0 just after a shot) kicks the rails back, flares a
-// cyan plasma burst with a shockwave, and jolts the robot.
-export function drawGunner(ctx, ship, now) {
+// drawGunner draws the kagent worker pool as the kagent robot at the
+// controls of a neon rail cannon in the bottom-left corner, all in vector
+// lines: every asteroid is fired out of it. The platform has one light per
+// worker (lit while busy) and the pool's name beside it. ship.a is the
+// barrel angle; ship.flash (1 → 0 just after a launch) kicks the rails back,
+// flares a cyan burst with a shockwave, and jolts the robot.
+export function drawGunner(ctx, ship, now, pools = [], busy = new Set()) {
   const glow = (color, blur) => { ctx.shadowColor = color; ctx.shadowBlur = blur; };
   const flash = ship.flash || 0;
   const a = ship.a;
-  // the targeting laser, in screen space so it stays thin
-  if (ship.target) {
-    const m = muzzleAt(ship);
-    ctx.save();
-    ctx.setLineDash([2, 5]);
-    ctx.globalAlpha *= 0.55;
-    ctx.beginPath();
-    ctx.moveTo(m.x, m.y); ctx.lineTo(ship.target.x, ship.target.y);
-    stroke(ctx, RED, 1);
-    ctx.restore();
-  }
   ctx.save();
   ctx.translate(ship.x, ship.y);
   ctx.scale(GUNNER_SCALE, GUNNER_SCALE);
@@ -307,15 +216,19 @@ export function drawGunner(ctx, ship, now) {
   ctx.moveTo(-26, 18); ctx.lineTo(-20, 9); ctx.lineTo(22, 9); ctx.lineTo(28, 18);
   ctx.moveTo(-18, 13.5); ctx.lineTo(20, 13.5);
   stroke(ctx, INK, 1.3);
-  for (let i = 0; i < 4; i++) {
+  const lights = workerLights(pools, busy);
+  lights.forEach((l, i) => { // one light per worker, lit while it hosts an actor
+    const lx = lights.length === 1 ? 1 : -15 + (i * 32) / (lights.length - 1);
     ctx.beginPath();
-    ctx.arc(-10 + i * 8, 15.8, 1, 0, Math.PI * 2);
-    const on = (Math.floor(now / 250) + i) % 4 === 0;
-    if (on) glow(NEW, 6);
-    ctx.fillStyle = on ? NEW : DIM;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  }
+    ctx.arc(lx, 15.8, 1.4, 0, Math.PI * 2);
+    if (l.busy) {
+      glow(NEW, 8);
+      ctx.fillStyle = NEW;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    stroke(ctx, l.busy ? NEW : DIM, 0.8);
+  });
   // the turret dome
   ctx.beginPath();
   ctx.arc(0, 9, 12, Math.PI, Math.PI * 2);
@@ -416,6 +329,13 @@ export function drawGunner(ctx, ship, now) {
   ctx.arc(grip.x, grip.y, 1.6, 0, Math.PI * 2);
   stroke(ctx, KAGENT_PURPLE, 1.2);
   ctx.restore();
+  // the worker pool it stands for
+  const n = pools.reduce((k, p) => k + (p.workers || []).length, 0);
+  if (pools.length) {
+    const lx = ship.x + 58 * GUNNER_SCALE, ly = ship.y + 23 * GUNNER_SCALE;
+    text(ctx, pools.map((p) => p.name).join(' · '), lx, ly, { size: 10, spacing: 2 });
+    text(ctx, `KAGENT WORKER POOL · ${n} WORKER${n === 1 ? '' : 'S'}`, lx, ly + 12, { size: 7, color: DIM, spacing: 1 });
+  }
 }
 
 export function vaultSlot(i) {
@@ -508,7 +428,6 @@ export function draw(ctx, world, now) {
   const busy = new Set();
   for (const r of world.rocks.values()) if (r.worker && !r.dying) busy.add(r.worker);
   drawTopBar(ctx, st, busy.size, world.rocks.size, world.vault.size);
-  for (const s of saucerSpots(st.snapshot?.pools || [], now)) drawSaucer(ctx, s, busy, now, world.beamAt?.[s.pool.name]);
   drawVault(ctx, world.vault.size);
   drawLog(ctx, world.log || []);
   drawGatewayPlanet(ctx, world, now);
@@ -523,21 +442,6 @@ export function draw(ctx, world, now) {
     stroke(ctx);
   }
   ctx.globalAlpha = dim ? 0.35 : 1;
-  for (const b of world.bullets) { // plasma bolts, with a glowing trail
-    const dx = b.target.x - b.from.x, dy = b.target.y - b.from.y, d = Math.hypot(dx, dy) || 1;
-    ctx.save();
-    ctx.shadowColor = NEW;
-    ctx.shadowBlur = 10;
-    ctx.beginPath();
-    ctx.moveTo(b.x - (dx / d) * 22, b.y - (dy / d) * 22);
-    ctx.lineTo(b.x, b.y);
-    stroke(ctx, NEW, 2);
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, 3.2, 0, Math.PI * 2);
-    ctx.fillStyle = INK;
-    ctx.fill();
-    ctx.restore();
-  }
   for (const c of world.capsules) capsule(ctx, c.x, c.y);
   for (const f of world.flashes) {
     const k = (now - f.born) / 600;
@@ -548,7 +452,7 @@ export function draw(ctx, world, now) {
     ctx.globalAlpha = dim ? 0.35 : 1;
   }
   drawFocus(ctx, world, now);
-  drawGunner(ctx, world.ship, now);
+  drawGunner(ctx, world.ship, now, st.snapshot?.pools || [], busy);
   drawCaption(ctx, world.captionLines, st.waves?.note, world.help);
   ctx.globalAlpha = 1;
 

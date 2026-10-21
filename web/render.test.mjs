@@ -28,18 +28,29 @@ test('the agentgateway planet floats, inside one shield, within the field', asyn
   assert.equal(FIELD.x0, 20);
 });
 
-test('the kagent ship glides side to side along the top, staying in the field', async () => {
-  const { saucerSpots, FIELD, SAUCER_SCALE } = await import('./render.mjs');
-  assert.ok(SAUCER_SCALE >= 1.4, 'bigger ship');
-  const pools = [{ name: 'kagent-default', workers: ['a', 'b', 'c'] }];
-  const xs = [];
-  for (let t = 0; t < 120000; t += 500) {
-    const [s] = saucerSpots(pools, t);
-    xs.push(s.x);
-    assert.ok(s.x - 70 * SAUCER_SCALE >= FIELD.x0 && s.x + 70 * SAUCER_SCALE <= FIELD.x1, `x ${s.x}`);
-    assert.ok(s.y < FIELD.y0, 'stays on top');
-  }
-  assert.ok(Math.max(...xs) - Math.min(...xs) > 300, 'moves side to side');
+test('the cannon carries its worker pool: one light per worker, lit while busy', async () => {
+  const { workerLights } = await import('./render.mjs');
+  const pools = [{ name: 'kagent-default', workers: ['w1', 'w2', 'w3'] }];
+  assert.deepEqual(workerLights(pools, new Set(['w2'])), [{ worker: 'w1', busy: false }, { worker: 'w2', busy: true }, { worker: 'w3', busy: false }]);
+  const many = [{ name: 'a', workers: Array.from({ length: 6 }, (_, i) => `a${i}`) }, { name: 'b', workers: Array.from({ length: 6 }, (_, i) => `b${i}`) }];
+  assert.equal(workerLights(many, new Set()).length, 8, 'at most eight lights fit on the platform');
+  assert.deepEqual(workerLights([], new Set()), []);
+});
+
+test("the cannon labels its worker pool", async () => {
+  const { drawGunner } = await import('./render.mjs');
+  const texts = [];
+  const ctx = new Proxy({ globalAlpha: 1 }, {
+    get(t, k) {
+      if (k in t) return t[k];
+      if (k === 'measureText') return () => ({ width: 10 });
+      return (...args) => { if (k === 'fillText') texts.push(args[0]); };
+    },
+    set(t, k, v) { t[k] = v; return true; },
+  });
+  drawGunner(ctx, { x: 105, y: 545, a: -0.8, flash: 0 }, 1000, [{ name: 'kagent-default', workers: ['w1', 'w2', 'w3'] }], new Set(['w1']));
+  assert.ok(texts.some((t) => /KAGENT-DEFAULT/i.test(t)), `labels: ${texts}`);
+  assert.ok(texts.some((t) => /3 WORKERS/.test(t)), `labels: ${texts}`);
 });
 
 test('the alien gunner holds the bottom-left corner, clear of the planet', async () => {
@@ -58,16 +69,6 @@ test('the alien gunner holds the bottom-left corner, clear of the planet', async
     }
   }
   assert.ok(minD >= SHIELD_R + 60, `closest approach ${minD.toFixed(0)}px`);
-});
-
-test('the cannon swings from straight up to just below level, never through the ground', async () => {
-  const { cannonAim, CANNON_MIN, CANNON_MAX } = await import('./render.mjs');
-  const g = { x: 100, y: 500 };
-  assert.ok(Math.abs(cannonAim(g, { x: 100, y: 100 }) + Math.PI / 2) < 1e-9, 'straight up');
-  assert.ok(Math.abs(cannonAim(g, { x: 500, y: 100 }) + Math.PI / 4) < 1e-9, 'up and right');
-  assert.equal(cannonAim(g, { x: 500, y: 700 }), CANNON_MAX, 'low right: as low as it goes');
-  assert.equal(cannonAim(g, { x: 20, y: 600 }), CANNON_MIN, 'behind it, low: back to its highest');
-  assert.equal(cannonAim(g, { x: 20, y: 100 }), CANNON_MIN, 'up and behind: its highest');
 });
 
 test('the kagent robot and its rail cannon draw without leaking canvas state, firing or not', async () => {

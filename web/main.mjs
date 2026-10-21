@@ -2,11 +2,11 @@
 // rocks, capsules and explosions only start from real, displayed events, and
 // each state message reconciles anything no event is about to change.
 import {
-  newQueue, schedule, due, pending, nextSuspend, rockShape, aimAngle, wrapLines, settled,
+  newQueue, schedule, due, pending, rockShape, cruise, wrapLines, settled,
   newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
   logLine, portFor, attribute, growScale, fxDuration, fxLabel, llmTiming, DELAY_MS,
 } from './show.mjs';
-import { setup, draw, saucerSpots, vaultSlot, activeField, gatewayPos, GUNNER, cannonAim, muzzleAt, NEW, RESUMED, GW, ALIEN } from './render.mjs';
+import { setup, draw, vaultSlot, activeField, gatewayPos, GUNNER, CANNON_MIN, CANNON_MAX, muzzleAt, NEW, RESUMED, GW, ALIEN } from './render.mjs';
 
 const ACTIVE = new Set(['resuming', 'running', 'suspending']);
 const canvas = document.getElementById('stage');
@@ -17,7 +17,6 @@ const world = {
   rocks: new Map(), // uid → rock
   vault: new Set(), // uids shown as stored
   fragments: [],
-  bullets: [],
   capsules: [],
   flashes: [],
   ship: { x: GUNNER.x, y: GUNNER.y, a: -0.8, flash: 0 }, // the kagent robot's rail cannon
@@ -37,7 +36,6 @@ const world = {
   shipFlash: -1e9,
   approvals: new Map(), // sessionId → turn waiting for a person
   approvalByUid: new Map(),
-  beamAt: {}, // pool → when its saucer last launched an asteroid (tractor beam)
 };
 const queue = newQueue();
 const captions = newCaptions();
@@ -49,9 +47,15 @@ window.__show = { world, queue }; // for debugging in the browser console
 const pools = () => world.state?.snapshot?.pools || [];
 const actors = () => world.state?.snapshot?.actors || {};
 
-function saucerFor(pool) {
-  const spots = saucerSpots(pools(), performance.now());
-  return spots.find((s) => s.pool.name === pool) || spots[0] || { x: 500, y: 88 };
+// launch fires the cannon: it snaps to a random angle across its swing (so
+// a wave's asteroids fan out), recoils, and gives back where (and which way)
+// the asteroid leaves the muzzle.
+function launch() {
+  const ship = world.ship;
+  const lo = CANNON_MIN + 0.2, hi = CANNON_MAX - 0.15;
+  ship.a = lo + Math.random() * (hi - lo);
+  ship.flash = 1;
+  return { ...muzzleAt(ship), a: ship.a };
 }
 
 function shortWorker(w) {
@@ -66,21 +70,22 @@ function subLabel(a) {
 }
 
 function spawnRock(uid, info, from) {
-  if (from && info.pool !== undefined) world.beamAt[info.pool || (pools()[0] || {}).name] = performance.now();
-  else if (from) world.beamAt[(pools()[0] || {}).name] = performance.now();
-  const angle = Math.PI / 2 + (Math.random() - 0.5) * 1.6;
-  const speed = 22 + Math.random() * 22;
+  // fired out of the cannon (fast, easing to a cruise), or placed in the field
+  const angle = from ? from.a : Math.PI / 2 + (Math.random() - 0.5) * 1.6;
+  const cruiseSpeed = 22 + Math.random() * 22;
+  const speed = from ? 75 + Math.random() * 25 : cruiseSpeed;
   const F = activeField(!!world.tour);
   const r = {
     uid,
     born: performance.now(),
     runSince: performance.now(), // active from launch: it grows until frozen
     x: from ? from.x : F.x0 + Math.random() * (F.x1 - F.x0),
-    y: from ? from.y + 30 : F.y0 + Math.random() * (F.y1 - F.y0),
+    y: from ? from.y : F.y0 + Math.random() * (F.y1 - F.y0),
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
     rot: 0,
     spin: (Math.random() - 0.5) * 0.6,
+    cruise: cruiseSpeed,
     shape: rockShape(uid),
     agent: info.agent || 'agent',
     worker: info.worker || '',
@@ -158,7 +163,7 @@ function show(ev, now) {
         world.splits.push({ x: parent.x, y: parent.y, born: now });
         break;
       }
-      const r = spawnRock(uid, { ...info, state: 'resuming' }, saucerFor(ev.pool));
+      const r = spawnRock(uid, { ...info, state: 'resuming' }, launch());
       r.sub = 'NEW SANDBOX';
       setOrigin(r, 'new');
       break;
@@ -172,10 +177,9 @@ function show(ev, now) {
       const from = world.vault.has(uid) ? vaultSlot([...world.vault].indexOf(uid)) : vaultPos();
       world.vault.delete(uid);
       const tok = beginAnim(anims, uid);
-      const s = saucerFor(ev.pool);
-      fly(from, s, 650, () => {
+      fly(from, GUNNER, 650, () => { // back into the cannon, then fired out again
         if (!endAnim(anims, uid, tok)) return;
-        const r = spawnRock(uid, { ...info, state: 'resuming' }, s);
+        const r = spawnRock(uid, { ...info, state: 'resuming' }, launch());
         r.sub = 'RESUMING';
         setOrigin(r, 'resumed', actors()[uid]?.snapshotGen);
       });
@@ -185,7 +189,7 @@ function show(ev, now) {
       touch(uid);
       let r = world.rocks.get(uid);
       if (!r) {
-        r = spawnRock(uid, info, saucerFor(ev.pool));
+        r = spawnRock(uid, info, launch());
         setOrigin(r, ev.startMs != null ? 'new' : 'resumed', info.snapshotGen);
       }
       r.worker = ev.worker;
@@ -205,18 +209,15 @@ function show(ev, now) {
       const tok = beginAnim(anims, uid);
       const store = () => { if (endAnim(anims, uid, tok)) world.vault.add(uid); };
       if (!r) {
-        fly(saucerFor(ev.pool), vaultPos(), 800, store);
+        fly(GUNNER, vaultPos(), 800, store);
         break;
       }
+      // nothing shoots it: Substrate froze it the moment its turn ended, so it
+      // cracks apart by itself and its snapshot drops into the store
       r.dying = true;
-      const { x: sx, y: sy } = muzzleAt(world.ship);
-      world.ship.flash = 1;
-      const dur = 150 + Math.hypot(r.x - sx, r.y - sy) * 0.35; // a cannonball takes a moment to get there
-      world.bullets.push({ x: sx, y: sy, from: { x: sx, y: sy }, target: r, t0: now, dur, hit: () => {
-        explode(r, performance.now());
-        world.rocks.delete(uid);
-        fly({ x: r.x, y: r.y }, vaultPos(), 900, store);
-      } });
+      explode(r, now);
+      world.rocks.delete(uid);
+      fly({ x: r.x, y: r.y }, vaultPos(), 900, store);
       break;
     }
     case 'fail': {
@@ -275,7 +276,7 @@ function showGateway(ev, now) {
   const port = portFor(ev);
   if (ev.kind === 'llm') world.modelLabel = port.label;
   const rock = ev.direction === 'egress' ? attribute(ev, [...world.rocks.values()]) : null;
-  const to = ev.kind === 'chat' ? saucerFor((pools()[0] || {}).name) : null;
+  const to = ev.kind === 'chat' ? { x: GUNNER.x, y: GUNNER.y } : null;
   // labels for the same planet stack instead of overlapping
   const slot = world.gwFx.length % 6;
   const timing = ev.kind === 'llm' ? llmTiming(ev) : null;
@@ -524,6 +525,7 @@ function frame(now) {
   for (const r of world.rocks.values()) {
     r.x += r.vx * dt;
     r.y += r.vy * dt;
+    if (r.cruise) ({ vx: r.vx, vy: r.vy } = cruise(r.vx, r.vy, r.cruise, dt)); // fired fast, easing to a cruise
     if (!r.frozen) r.rot += r.spin * dt; // rocks tumble; a frozen one holds still
     if (r.runSince && !r.dying && !r.frozen) r.scale = growScale(now - r.runSince);
     const w = F.x1 - F.x0, h = F.y1 - F.y0;
@@ -545,13 +547,6 @@ function frame(now) {
   world.flashes = world.flashes.filter((f) => now - f.born < 600);
   world.splits = world.splits.filter((sp) => now - sp.born < 700);
 
-  world.bullets = world.bullets.filter((b) => {
-    const k = (now - b.t0) / b.dur;
-    if (k >= 1) { b.hit(); return false; }
-    b.x = b.from.x + (b.target.x - b.from.x) * k;
-    b.y = b.from.y + (b.target.y - b.from.y) * k;
-    return true;
-  });
   world.capsules = world.capsules.filter((c) => {
     const k = Math.min((now - c.t0) / c.dur, 1);
     const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
@@ -567,21 +562,10 @@ function frame(now) {
   const e = Math.min(1, dt * 1.2);
   world.gwPos = { x: world.gwPos.x + (goal.x - world.gwPos.x) * e, y: world.gwPos.y + (goal.y - world.gwPos.y) * e };
 
-  // the kagent robot swings its cannon toward the next suspend (or the nearest rock)
-  const t = now / 1000;
+  // the kagent robot sweeps its cannon slowly between launches
   const ship = world.ship;
-  const targetUid = nextSuspend(queue);
-  let target = targetUid && world.rocks.get(targetUid);
-  if (!target) {
-    let best = Infinity;
-    for (const r of world.rocks.values()) {
-      const d = Math.hypot(r.x - ship.x, r.y - ship.y);
-      if (d < best && !r.dying) { best = d; target = r; }
-    }
-  }
-  const want = target ? cannonAim(ship, target) : -0.8 + 0.25 * Math.sin(t * 0.6); // idle: a slow sweep
-  ship.target = target ? { x: target.x, y: target.y } : null; // the targeting laser
-  ship.a += Math.max(-3 * dt, Math.min(3 * dt, want - ship.a));
+  const want = -0.8 + 0.35 * Math.sin((now / 1000) * 0.5);
+  ship.a += Math.max(-1.5 * dt, Math.min(1.5 * dt, want - ship.a));
   ship.flash = Math.max(0, ship.flash - dt * 4);
 
   draw(ctx, world, now);

@@ -229,3 +229,14 @@ test('llmTiming replays a model call with its real request and response phases',
   assert.equal(llmTiming({ durationMs: 50 }).total, 900, 'very fast calls still visible');
   assert.equal(llmTiming({ durationMs: 50 }).ttft, 540, 'no ttft: assume 60% thinking');
 });
+
+test('a fired asteroid slows to its cruising speed, never below it', async () => {
+  const { cruise } = await import('./show.mjs');
+  let v = { vx: 90, vy: 0 };
+  for (let i = 0; i < 600; i++) v = cruise(v.vx, v.vy, 30, 1 / 60);
+  assert.ok(Math.abs(Math.hypot(v.vx, v.vy) - 30) < 0.5, `settles at 30, got ${Math.hypot(v.vx, v.vy)}`);
+  const slow = cruise(10, 0, 30, 1 / 60);
+  assert.deepEqual(slow, { vx: 10, vy: 0 }, 'an already slow rock is left alone');
+  const once = cruise(60, 80, 30, 1 / 60);
+  assert.ok(Math.abs(Math.atan2(once.vy, once.vx) - Math.atan2(80, 60)) < 1e-9, 'keeps its heading');
+});

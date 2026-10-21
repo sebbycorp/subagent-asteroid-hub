@@ -89,6 +89,15 @@ export function rockShape(uid) {
   return pts;
 }
 
+// cruise eases a fired asteroid down to its cruising speed, keeping its
+// heading; a rock already at or below that speed is left alone.
+export function cruise(vx, vy, speed, dt) {
+  const sp = Math.hypot(vx, vy);
+  if (sp <= speed) return { vx, vy };
+  const k = (speed + (sp - speed) * Math.exp(-dt * 1.2)) / sp;
+  return { vx: vx * k, vy: vy * k };
+}
+
 export function aimAngle(ship, target) {
   return Math.atan2(target.y - ship.y, target.x - ship.x);
 }
