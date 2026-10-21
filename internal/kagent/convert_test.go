@@ -4,7 +4,9 @@ import (
 	"testing"
 	"time"
 
+	apiv1 "github.com/kagent-dev/kagent/go/api/gen/kagent/api/v1"
 	"go.ate.dev/substrate/pkg/proto/ateapipb"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/sebbycorp/subagent-asteroid-hub/internal/model"
@@ -77,5 +79,16 @@ func TestAgentFromTemplate(t *testing.T) {
 		if got := AgentFromTemplate(in); got != want {
 			t.Errorf("AgentFromTemplate(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestModelsFromConfigs(t *testing.T) {
+	mc := func(model string) *apiv1.ModelConfig {
+		v, _ := structpb.NewStruct(map[string]any{"spec": map[string]any{"model": model, "provider": "OpenAI"}})
+		return &apiv1.ModelConfig{Resource: &apiv1.StructuredObject{Value: v}}
+	}
+	got := ModelsFromConfigs([]*apiv1.ModelConfig{mc("qwen3:8b"), mc("gpt-4.1-mini"), mc("qwen3:8b"), mc("")})
+	if len(got) != 2 || got[0] != "gpt-4.1-mini" || got[1] != "qwen3:8b" {
+		t.Fatalf("models %v", got)
 	}
 }

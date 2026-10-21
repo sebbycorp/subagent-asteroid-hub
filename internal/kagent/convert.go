@@ -3,7 +3,10 @@
 package kagent
 
 import (
+	"sort"
 	"strings"
+
+	apiv1 "github.com/kagent-dev/kagent/go/api/gen/kagent/api/v1"
 
 	"go.ate.dev/substrate/pkg/proto/ateapipb"
 
@@ -66,4 +69,19 @@ func AgentFromTemplate(template string) string {
 		}
 	}
 	return template[:i]
+}
+
+// ModelsFromConfigs lists the distinct models kagent's ModelConfigs use.
+func ModelsFromConfigs(mcs []*apiv1.ModelConfig) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, mc := range mcs {
+		m := mc.GetResource().GetValue().GetFields()["spec"].GetStructValue().GetFields()["model"].GetStringValue()
+		if m != "" && !seen[m] {
+			seen[m] = true
+			out = append(out, m)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

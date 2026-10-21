@@ -47,6 +47,7 @@ type Snapshot struct {
 	TakenAt time.Time        `json:"takenAt"`
 	Pools   []Pool           `json:"pools"`
 	Actors  map[string]Actor `json:"actors"`
+	Models  []string         `json:"models"` // models kagent's ModelConfigs use
 }
 
 // EventKind is a lifecycle event shown on screen.

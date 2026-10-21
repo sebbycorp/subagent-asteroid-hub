@@ -132,7 +132,8 @@ test('log lines: short, real, one per event', async () => {
 test('gateway requests dock at the matching port on the agentgateway ship', async () => {
   const { portFor } = await import('./show.mjs');
   assert.deepEqual(portFor({ kind: 'llm', target: 'qwen', model: 'qwen3:8b' }), { key: 'llm', label: 'QWEN3:8B' });
-  assert.deepEqual(portFor({ kind: 'tool', target: 'kagent-tools' }), { key: 'mcp', label: 'K8S TOOLS' });
+  assert.deepEqual(portFor({ kind: 'tool', target: 'kagent-tools' }), { key: 'mcp', label: 'KAGENT-TOOLS' });
+  assert.deepEqual(portFor({ kind: 'tool', target: 'github' }), { key: 'mcp', label: 'GITHUB' }, 'any MCP server, not just k8s');
   assert.deepEqual(portFor({ kind: 'chat', target: 'kagent-a2a' }), { key: 'a2a', label: 'CHATS IN' });
 });
 
@@ -176,6 +177,7 @@ test('call animations last longer for slower real calls, within bounds', async (
 test('call labels say what crossed the gateway', async () => {
   const { fxLabel } = await import('./show.mjs');
   assert.equal(fxLabel({ kind: 'llm', model: 'qwen3:8b', durationMs: 1775, tokens: 608 }), 'QWEN3:8B · 1.8S · 608 TOK');
-  assert.equal(fxLabel({ kind: 'tool', tool: 'k8s_get_resources', durationMs: 54 }), 'K8S_GET_RESOURCES · 54MS');
+  assert.equal(fxLabel({ kind: 'tool', tool: 'k8s_get_resources', target: 'kagent-tools', durationMs: 54 }), 'KAGENT-TOOLS/K8S_GET_RESOURCES · 54MS');
+  assert.equal(fxLabel({ kind: 'tool', tool: 'search_issues', target: 'github', durationMs: 310 }), 'GITHUB/SEARCH_ISSUES · 310MS');
   assert.equal(fxLabel({ kind: 'chat', durationMs: 2700 }), 'A2A CHAT IN · 2.7S');
 });

@@ -218,7 +218,7 @@ export function logLine(it) {
 // portFor names the port on the agentgateway ship a request docks at.
 export function portFor(ev) {
   if (ev.kind === 'chat') return { key: 'a2a', label: 'CHATS IN' };
-  if (ev.kind === 'tool') return { key: 'mcp', label: 'K8S TOOLS' };
+  if (ev.kind === 'tool') return { key: 'mcp', label: String(ev.target || 'MCP').toUpperCase() };
   return { key: 'llm', label: String(ev.model || ev.target).toUpperCase() };
 }
 
@@ -253,6 +253,6 @@ export function fxDuration(realMs) {
 export function fxLabel(ev) {
   const d = dur(ev.durationMs);
   if (ev.kind === 'chat') return `A2A CHAT IN · ${d}`;
-  if (ev.kind === 'tool') return `${String(ev.tool).toUpperCase()} · ${d}`;
+  if (ev.kind === 'tool') return `${String(ev.target ? `${ev.target}/${ev.tool}` : ev.tool).toUpperCase()} · ${d}`;
   return `${String(ev.model || ev.target).toUpperCase()} · ${d}${ev.tokens ? ` · ${ev.tokens} TOK` : ''}`;
 }

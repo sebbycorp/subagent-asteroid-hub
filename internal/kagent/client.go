@@ -47,11 +47,13 @@ type Client struct {
 	harness  apiv1.HarnessServiceClient
 
 	checkpoints apiv1.CheckpointServiceClient
+	modelSvc    apiv1.ModelServiceClient
 
 	mu        sync.Mutex
 	slowAt    time.Time
 	pools     []model.Pool
 	sessAgent map[string]string
+	models    []string
 }
 
 type bearer string
@@ -102,6 +104,7 @@ func Dial(o Options) (*Client, error) {
 		harness:  apiv1.NewHarnessServiceClient(conn),
 
 		checkpoints: apiv1.NewCheckpointServiceClient(conn),
+		modelSvc:    apiv1.NewModelServiceClient(conn),
 	}, nil
 }
 
@@ -128,7 +131,7 @@ func (c *Client) Snapshot(ctx context.Context) (model.Snapshot, error) {
 		return model.Snapshot{}, err
 	}
 	c.mu.Lock()
-	pools, sessAgent := c.pools, c.sessAgent
+	pools, sessAgent, models := c.pools, c.sessAgent, c.models
 	c.mu.Unlock()
 
 	actors := map[string]model.Actor{}
@@ -154,7 +157,7 @@ func (c *Client) Snapshot(ctx context.Context) (model.Snapshot, error) {
 			break
 		}
 	}
-	return model.Snapshot{TakenAt: time.Now(), Pools: pools, Actors: actors}, nil
+	return model.Snapshot{TakenAt: time.Now(), Pools: pools, Actors: actors, Models: models}, nil
 }
 
 func (c *Client) refreshSlow(ctx context.Context) error {
@@ -203,8 +206,12 @@ func (c *Client) refreshSlow(ctx context.Context) error {
 	for _, s := range sessions {
 		sessAgent[s.ID] = s.Agent.Name
 	}
+	var models []string
+	if mcs, err := c.modelSvc.ListModelConfigs(cctx, &apiv1.ListModelConfigsRequest{}); err == nil {
+		models = ModelsFromConfigs(mcs.GetModelConfigs())
+	}
 	c.mu.Lock()
-	c.pools, c.sessAgent, c.slowAt = pools, sessAgent, time.Now()
+	c.pools, c.sessAgent, c.models, c.slowAt = pools, sessAgent, models, time.Now()
 	c.mu.Unlock()
 	return nil
 }

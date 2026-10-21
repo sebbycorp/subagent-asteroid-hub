@@ -6,7 +6,7 @@ import {
   newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
   logLine, portFor, attribute, growScale, fxDuration, fxLabel, DELAY_MS,
 } from './show.mjs';
-import { setup, draw, saucerSpots, vaultSlot, activeField, shipPos, NEW, RESUMED, GW } from './render.mjs';
+import { setup, draw, saucerSpots, vaultSlot, activeField, gatewayPos, NEW, RESUMED, GW } from './render.mjs';
 
 const ACTIVE = new Set(['resuming', 'running', 'suspending']);
 const canvas = document.getElementById('stage');
@@ -35,6 +35,7 @@ const world = {
   modelLabel: '',
   tourGw: { chapter: 0, llm: 0, tool: 0 },
   shipFlash: -1e9,
+  beamAt: {}, // pool → when its saucer last launched an asteroid (tractor beam)
 };
 const queue = newQueue();
 const captions = newCaptions();
@@ -63,6 +64,8 @@ function subLabel(a) {
 }
 
 function spawnRock(uid, info, from) {
+  if (from && info.pool !== undefined) world.beamAt[info.pool || (pools()[0] || {}).name] = performance.now();
+  else if (from) world.beamAt[(pools()[0] || {}).name] = performance.now();
   const angle = Math.PI / 2 + (Math.random() - 0.5) * 1.6;
   const speed = 22 + Math.random() * 22;
   const F = activeField(!!world.tour);
@@ -487,11 +490,11 @@ function frame(now) {
     return true;
   });
 
-  // the agentgateway ship drifts; it eases to its tour-time lane and back
-  const goal = shipPos(now, !!world.tour);
-  if (!world.shipGw) world.shipGw = goal;
+  // the agentgateway planet drifts; it eases to its tour-time lane and back
+  const goal = gatewayPos(now, !!world.tour);
+  if (!world.gwPos) world.gwPos = goal;
   const e = Math.min(1, dt * 1.2);
-  world.shipGw = { x: world.shipGw.x + (goal.x - world.shipGw.x) * e, y: world.shipGw.y + (goal.y - world.shipGw.y) * e };
+  world.gwPos = { x: world.gwPos.x + (goal.x - world.gwPos.x) * e, y: world.gwPos.y + (goal.y - world.gwPos.y) * e };
 
   // autopilot: drift on a slow figure-eight, turn toward the next suspend
   const t = now / 1000;
