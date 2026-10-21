@@ -35,6 +35,17 @@ export function fighterPos(t, tourOpen) {
   return { x: 505 - 300 * Math.sin(a), y };
 }
 
+// moonAt is where the moon riding the planet's tilted ring is drawn at angle
+// a, and whether it shows: on the back half of its orbit it is hidden while
+// it passes behind the planet's disc.
+export function moonAt(c, a, tilt) {
+  const mx = Math.cos(a) * PLANET_R * 1.5, my = Math.sin(a) * PLANET_R * 0.3;
+  const x = c.x + mx * Math.cos(tilt) - my * Math.sin(tilt);
+  const y = c.y + mx * Math.sin(tilt) + my * Math.cos(tilt);
+  const behind = Math.sin(a) < 0 && Math.hypot(x - c.x, y - c.y) < PLANET_R + 4;
+  return { x, y, visible: !behind };
+}
+
 // edgeToward is the point on the shield facing p.
 export function edgeToward(c, p) {
   const a = Math.atan2(p.y - c.y, p.x - c.x);
@@ -603,12 +614,10 @@ function drawGatewayPlanet(ctx, world, now) {
   ctx.beginPath();
   ctx.ellipse(x, y, PLANET_R * 1.5, PLANET_R * 0.3, tilt, 0.12 * Math.PI, 0.88 * Math.PI, true);
   stroke(ctx, INK, 1.4);
-  const ma = now / 1600;
-  const mx = Math.cos(ma) * PLANET_R * 1.5, my = Math.sin(ma) * PLANET_R * 0.3;
-  const behind = Math.sin(ma) < 0 && Math.abs(mx) < PLANET_R;
-  if (!behind) {
+  const moon = moonAt({ x, y }, now / 1600, tilt);
+  if (moon.visible) {
     ctx.beginPath();
-    ctx.arc(x + mx * Math.cos(tilt) - my * Math.sin(tilt), y + mx * Math.sin(tilt) + my * Math.cos(tilt), 4, 0, Math.PI * 2);
+    ctx.arc(moon.x, moon.y, 4, 0, Math.PI * 2);
     stroke(ctx, INK, 1.2);
   }
   if (LOGO.complete && LOGO.naturalWidth) {
@@ -735,8 +744,10 @@ function drawGatewayFx(ctx, world, now) {
     // the shield: the call left this sandbox only through the gateway
     if (fx.rock && !fx.ingress) {
       const sc = fx.rock.scale || 1;
+      ctx.setLineDash([2, 4]); // dotted, so it reads as a field around the UFO
       hexagon(ctx, fx.rock.x, fx.rock.y, 34 * sc + Math.sin(k * Math.PI * 6) * 2);
       stroke(ctx, GW, 1.8);
+      ctx.setLineDash([]);
     }
     // a running feed of calls beside the planet (on whichever side has room)
     const right = gw.x < 600;

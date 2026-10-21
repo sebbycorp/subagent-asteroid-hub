@@ -66,6 +66,7 @@ func main() {
 	var autoBefore bool
 	guide = tour.New(client, gen, h, tour.Options{
 		OnApproval: board.Add,
+		OnForget:   board.Forget, // its sessions are deleted when the tour ends
 		OnChange:   func(s tour.Status) { h.SetTour(s) },
 		OnActive: func(on bool) {
 			if on {

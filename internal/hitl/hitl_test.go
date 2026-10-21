@@ -134,3 +134,18 @@ func TestBoardDecideTwiceIsRefusedWhileDeciding(t *testing.T) {
 	close(d.gate)
 	b.wg.Wait()
 }
+
+func TestBoardForgetDropsADeletedSession(t *testing.T) {
+	var last []Pending
+	b := New(&fakeDecider{}, &marks{}, Options{OnChange: func(p []Pending) { last = p }})
+	b.Add("s1", "ops", approval("t1"))
+	b.Add("s2", "ops", approval("t2"))
+	b.Forget("s1")
+	if p := b.List(); len(p) != 1 || p[0].SessionID != "s2" || len(last) != 1 {
+		t.Fatalf("pending %+v (last %+v)", p, last)
+	}
+	b.Forget("nope") // no-op
+	if err := b.Decide(context.Background(), "s1", "t1", true); !errors.Is(err, ErrNotPending) {
+		t.Fatalf("forgotten session still decidable: %v", err)
+	}
+}

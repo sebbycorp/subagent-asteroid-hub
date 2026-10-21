@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -84,6 +85,10 @@ func (f *fakeClient) Checkpoint(_ context.Context, id, head string) (string, err
 	f.ckOf["ck-"+id] = id
 	f.mu.Unlock()
 	return "ck-" + id, f.log("checkpoint " + id + " " + head)
+}
+
+func (f *fakeClient) DeleteSession(_ context.Context, id string) error {
+	return f.log("delete " + id)
 }
 
 func (f *fakeClient) Fork(_ context.Context, ck, name string) (string, error) {
@@ -296,5 +301,47 @@ func TestTourHITLChapterWithoutOpsAgent(t *testing.T) {
 	}
 	if st := r.t.Status(); st.Kind != "hitl" || !strings.Contains(st.Error, "ASTEROIDS-DEMO-OPS") {
 		t.Fatalf("status %+v", st)
+	}
+}
+
+func deletes(calls []string) []string {
+	var out []string
+	for _, c := range calls {
+		if strings.HasPrefix(c, "delete ") {
+			out = append(out, strings.TrimPrefix(c, "delete "))
+		}
+	}
+	return out
+}
+
+// The tour removes the sessions it made when it ends, so snapshots of past
+// tours don't pile up in the store.
+func TestTourCleansUpItsSessionsWhenItEnds(t *testing.T) {
+	var forgotten []string
+	r := newRig()
+	r.t = New(r.c, r.w, r.m, Options{OnForget: func(id string) { forgotten = append(forgotten, id) }})
+	r.step(t, r.t.Start)
+	for i := 0; i < 5; i++ { // through the HITL chapter: main s1, fork s2, hitl s3
+		r.step(t, r.t.Next)
+	}
+	r.t.Stop()
+	r.t.wg.Wait()
+	got := deletes(r.c.calls)
+	sort.Strings(got)
+	if fmt.Sprint(got) != "[s1 s2 s3]" {
+		t.Fatalf("deleted %v (calls %v)", got, r.c.calls)
+	}
+	if len(forgotten) != 3 {
+		t.Fatalf("forgotten %v", forgotten)
+	}
+}
+
+func TestTourRestartCleansUpThePreviousRun(t *testing.T) {
+	r := newRig()
+	r.step(t, r.t.Start) // s1
+	r.step(t, r.t.Start) // restart: s1 goes, s2 is the new main session
+	r.t.wg.Wait()
+	if got := deletes(r.c.calls); fmt.Sprint(got) != "[s1]" {
+		t.Fatalf("deleted %v", got)
 	}
 }

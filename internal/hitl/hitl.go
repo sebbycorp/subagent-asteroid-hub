@@ -101,6 +101,16 @@ func (b *Board) removeLocked(sessionID string) (Pending, bool) {
 	return Pending{}, false
 }
 
+// Forget drops a session's pending request (the session was deleted).
+func (b *Board) Forget(sessionID string) {
+	b.mu.Lock()
+	_, ok := b.removeLocked(sessionID)
+	b.mu.Unlock()
+	if ok {
+		b.changed()
+	}
+}
+
 // Decide answers a waiting turn in the background; the agent resumes and
 // finishes its turn. The decision must name the exact turn (session and
 // task) the person was shown, so it can't land on a request they never saw.

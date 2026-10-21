@@ -21,6 +21,7 @@ type Client interface {
 	Chat(ctx context.Context, sessionID, text string) (traffic.ChatResult, error)
 	Checkpoint(ctx context.Context, sessionID, headTaskID string) (string, error)
 	Fork(ctx context.Context, checkpointID, name string) (string, error)
+	DeleteSession(ctx context.Context, id string) error
 }
 
 // Waver sends a wave of chats (the traffic generator).
@@ -49,7 +50,9 @@ type Options struct {
 	OnActive func(active bool) // e.g. pause auto waves during the tour
 	// OnApproval receives a turn that paused for a human (the HITL chapter).
 	OnApproval func(sessionID, agent string, ap *traffic.Approval)
-	Now        func() time.Time
+	// OnForget is told about each tour session deleted when the tour ends.
+	OnForget func(sessionID string)
+	Now      func() time.Time
 }
 
 var ErrBusy = errors.New("the tour is still running this chapter")
@@ -132,7 +135,8 @@ type Tour struct {
 	session  string // the tour's main session
 	lastTask string // its latest turn, the checkpoint head
 	fork     string
-	hitl     string // the HITL chapter's session, while it waits for a person
+	hitl     string   // the HITL chapter's session, while it waits for a person
+	created  []string // sessions this run made; deleted when the tour ends
 }
 
 // New creates an inactive tour.
@@ -171,6 +175,7 @@ func (t *Tour) Start(ctx context.Context) error {
 	wasActive := t.st.Active
 	t.session, t.lastTask, t.fork, t.hitl = "", "", "", ""
 	t.mu.Unlock()
+	t.cleanup() // a restart clears the previous run's sessions
 	if !wasActive && t.o.OnActive != nil {
 		t.o.OnActive(true)
 	}
@@ -206,9 +211,39 @@ func (t *Tour) Stop() {
 	t.st = Status{Total: len(chapters), Focus: []string{}}
 	t.mu.Unlock()
 	t.changed()
+	t.cleanup()
 	if t.o.OnActive != nil {
 		t.o.OnActive(false)
 	}
+}
+
+// track remembers a session this tour run created.
+func (t *Tour) track(id string) {
+	t.mu.Lock()
+	t.created = append(t.created, id)
+	t.mu.Unlock()
+}
+
+// cleanup deletes the sessions this run created (in the background), so the
+// snapshot store doesn't fill up with past tours.
+func (t *Tour) cleanup() {
+	t.mu.Lock()
+	ids, c := t.created, t.c
+	t.created = nil
+	t.mu.Unlock()
+	if len(ids) == 0 {
+		return
+	}
+	t.wg.Add(1)
+	go func() {
+		defer t.wg.Done()
+		for _, id := range ids {
+			c.DeleteSession(context.Background(), id)
+			if t.o.OnForget != nil {
+				t.o.OnForget(id)
+			}
+		}
+	}()
 }
 
 func (t *Tour) changed() {
@@ -308,6 +343,7 @@ func (t *Tour) runHITL(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	t.track(id)
 	t.update(func(s *Status) { s.Focus = []string{id} })
 	res, err := t.chat(ctx, id, hitlQuestion, ops.Name)
 	if err != nil {
@@ -375,6 +411,7 @@ func (t *Tour) runCreate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	t.track(id)
 	t.mu.Lock()
 	t.session = id
 	t.mu.Unlock()
@@ -439,6 +476,7 @@ func (t *Tour) runFork(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	t.track(fork)
 	t.mu.Lock()
 	t.fork = fork
 	t.mu.Unlock()

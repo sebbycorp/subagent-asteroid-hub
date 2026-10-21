@@ -59,3 +59,17 @@ test('the fighter flies opposite the agentgateway planet and never comes close',
   const f0 = fighterPos(1000, false), f1 = fighterPos(2000, false);
   assert.ok(Math.sign(g1.x - g0.x) === -Math.sign(f1.x - f0.x));
 });
+
+test('the moon hides when it passes behind the planet', async () => {
+  const { moonAt, PLANET_R } = await import('./render.mjs');
+  const c = { x: 500, y: 300 };
+  const behind = moonAt(c, -Math.PI / 2, -0.32); // back of the orbit, over the disc
+  assert.equal(behind.visible, false, 'behind the planet');
+  assert.ok(Math.hypot(behind.x - c.x, behind.y - c.y) < PLANET_R);
+  assert.equal(moonAt(c, Math.PI / 2, -0.32).visible, true, 'in front of the planet');
+  assert.equal(moonAt(c, Math.PI, -0.32).visible, true, 'off to the side');
+  for (let a = 0; a < Math.PI * 2; a += 0.01) {
+    const m = moonAt(c, a, -0.32 + 0.12 * Math.sin(a * 3));
+    if (Math.sin(a) < 0 && Math.hypot(m.x - c.x, m.y - c.y) < PLANET_R + 4) assert.equal(m.visible, false, `peeks through at ${a}`);
+  }
+});
