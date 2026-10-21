@@ -34,33 +34,31 @@ test('schedule after a quiet spell is not penalised by an old gap', () => {
   assert.equal(schedule(q, { seq: 2 }, 60000), 60000 + DELAY_MS);
 });
 
-test('scouts are Rebel ships (X-, Y-, A-wing and the Falcon), each actor always the same one', async () => {
-  const { scoutKind, scoutOutline } = await import('./show.mjs');
-  const uids = Array.from({ length: 60 }, (_, i) => `uid-${i}-${i * 7919}`);
-  const kinds = new Set(uids.map(scoutKind));
-  assert.deepEqual([...kinds].sort(), ['awing', 'falcon', 'xwing', 'ywing']);
-  const outlines = [...kinds].map((k) => JSON.stringify(scoutOutline(k)));
-  assert.equal(new Set(outlines).size, 4, 'each design has its own silhouette');
-  for (const k of kinds) {
-    const pts = scoutOutline(k);
-    assert.ok(Math.max(...pts.map(([x]) => x)) >= 12, `${k} has a nose pointing forward (+x)`);
-  }
-  for (const u of uids.slice(0, 12)) {
-    assert.equal(scoutKind(u), scoutKind(u));
-    const pts = scoutOutline(scoutKind(u));
-    assert.ok(pts.length >= 4, `${scoutKind(u)} outline`);
-    for (const [x, y] of pts) assert.ok(Math.hypot(x, y) <= 20, `${scoutKind(u)} point ${x},${y} too far`);
+test('rockShape deterministic and bounded', async () => {
+  const { rockShape } = await import('./show.mjs');
+  const a = rockShape('cbcec519-0f94');
+  assert.deepEqual(a, rockShape('cbcec519-0f94'));
+  assert.notDeepEqual(a, rockShape('d6221e2d-aceb'));
+  for (const [x, y] of a) {
+    const r = Math.hypot(x, y);
+    assert.ok(r >= 6 && r <= 38, `radius ${r}`);
   }
 });
 
-test('ships turn to face their flight path, the short way round', async () => {
-  const { steer } = await import('./show.mjs');
-  let rot = 0;
-  for (let i = 0; i < 200; i++) rot = steer(rot, 0, 10, 1 / 60);
-  assert.ok(Math.abs(rot - Math.PI / 2) < 0.01, `ends facing down, got ${rot}`);
-  const r = steer(3.0, -10, -1.4, 1 / 60); // target ~ -3.0: just past pi
-  assert.ok(r > 3.0, `turns through pi, not all the way back (got ${r})`);
-  assert.equal(steer(1, 0, 0, 1 / 60), 1, 'a stopped fighter keeps its heading');
+test('asteroids come in clearly different shapes', async () => {
+  const { rockShape, rockKind } = await import('./show.mjs');
+  const uids = Array.from({ length: 60 }, (_, i) => `uid-${i}-${i * 7919}`);
+  const kinds = new Set(uids.map(rockKind));
+  assert.ok(kinds.size >= 4, `only ${[...kinds]} shapes`);
+  const counts = new Set(uids.map((u) => rockShape(u).length));
+  assert.ok(counts.size >= 4, `point counts ${[...counts]}`);
+  const aspect = (pts) => {
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+    return Math.max(w, h) / Math.min(w, h);
+  };
+  const long = uids.filter((u) => rockKind(u) === 'long').map((u) => aspect(rockShape(u)));
+  assert.ok(long.length && Math.min(...long) > 1.3, `long rocks aspect ${long}`);
 });
 
 test('human-in-the-loop captions are never dropped from a burst', async () => {

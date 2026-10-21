@@ -53,45 +53,40 @@ function seeded(str) {
   };
 }
 
-const SCOUT_KINDS = ['xwing', 'ywing', 'awing', 'falcon'];
+const ROCK_KINDS = ['jagged', 'long', 'chunky', 'crater'];
 
-// scoutKind picks the Rebel ship for an actor, always the same one, so a
-// session keeps its look across suspends and resumes.
-export function scoutKind(uid) {
-  return SCOUT_KINDS[Math.floor(seeded(`kind:${uid}`)() * SCOUT_KINDS.length)];
+// rockKind picks one of a few asteroid families for an actor, always the same.
+export function rockKind(uid) {
+  return ROCK_KINDS[Math.floor(seeded(`kind:${uid}`)() * ROCK_KINDS.length)];
 }
 
-// Each ship's hull seen from above, nose along +x: what breaks apart when
-// Substrate freezes it.
-const OUTLINES = {
-  // X-foils: needle nose, four wings spread in an X, engines at the roots
-  xwing: [[18, 0], [6, -2], [-2, -3], [-6, -15], [-10, -15], [-10, -3], [-12, -2], [-12, 2], [-10, 3], [-10, 15], [-6, 15], [-2, 3], [6, 2]],
-  // cockpit pod up front, two long engine nacelles behind
-  ywing: [[16, 0], [12, -4], [4, -4], [2, -10], [-14, -10], [-14, -6], [-6, -6], [-6, 6], [-14, 6], [-14, 10], [2, 10], [4, 4], [12, 4]],
-  // a fast wedge
-  awing: [[16, 0], [-8, -13], [-12, -13], [-10, 0], [-12, 13], [-8, 13]],
-  // a disc with two forward mandibles
-  falcon: (() => {
-    const pts = [[18, -7], [18, -2.5], [11, -2], [11, 2], [18, 2.5], [18, 7]];
-    for (let i = 0; i <= 12; i++) {
-      const a = 0.6 + (i / 12) * (Math.PI * 2 - 1.2);
-      pts.push([Math.cos(a) * 13, Math.sin(a) * 13]);
-    }
-    return pts;
-  })(),
-};
-
-export function scoutOutline(kind) {
-  return OUTLINES[kind] || OUTLINES.xwing;
-}
-
-// steer turns a ship's heading toward its flight path, easing in and
-// always the short way round. A stopped fighter keeps its heading.
-export function steer(rot, vx, vy, dt) {
-  if (!vx && !vy) return rot;
-  const TAU = Math.PI * 2;
-  const d = ((((Math.atan2(vy, vx) - rot + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
-  return rot + d * Math.min(1, dt * 6);
+// rockShape is an asteroid outline, the same for the same actor every time
+// (so a resumed rock is recognisably the same one), drawn from its family:
+//   jagged  deep notches in random places
+//   long    stretched, potato-like
+//   chunky  few big flat faces
+//   crater  a bite taken out of one side
+export function rockShape(uid) {
+  const rand = seeded(uid);
+  const kind = rockKind(uid);
+  const counts = { jagged: [10, 3], long: [9, 3], chunky: [6, 2], crater: [9, 2] };
+  const [base, spread] = counts[kind];
+  const n = base + Math.floor(rand() * spread);
+  const R = kind === 'long' ? 18 + rand() * 8 : 18 + rand() * 10;
+  const bite = Math.floor(rand() * n);
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + (rand() - 0.5) * (1.8 / n);
+    let r;
+    if (kind === 'jagged') r = R * (rand() < 0.4 ? 0.52 + 0.16 * rand() : 0.85 + 0.15 * rand());
+    else if (kind === 'chunky') r = R * (0.7 + 0.3 * rand());
+    else if (kind === 'crater') r = R * (i === bite || i === (bite + 1) % n ? 0.45 + 0.1 * rand() : 0.85 + 0.15 * rand());
+    else r = R * (0.72 + 0.28 * rand());
+    let x = Math.cos(a) * r, y = Math.sin(a) * r;
+    if (kind === 'long') { x *= 1.45; y *= 0.75; }
+    pts.push([x, y]);
+  }
+  return pts;
 }
 
 export function aimAngle(ship, target) {

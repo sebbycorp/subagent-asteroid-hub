@@ -2,7 +2,7 @@
 // rocks, capsules and explosions only start from real, displayed events, and
 // each state message reconciles anything no event is about to change.
 import {
-  newQueue, schedule, due, pending, nextSuspend, scoutKind, scoutOutline, steer, aimAngle, wrapLines, settled,
+  newQueue, schedule, due, pending, nextSuspend, rockShape, aimAngle, wrapLines, settled,
   newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
   logLine, portFor, attribute, growScale, fxDuration, fxLabel, llmTiming, DELAY_MS,
 } from './show.mjs';
@@ -79,9 +79,9 @@ function spawnRock(uid, info, from) {
     y: from ? from.y + 30 : F.y0 + Math.random() * (F.y1 - F.y0),
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
-    rot: angle, // nose first along its launch path
-    kind: scoutKind(uid),
-    shape: scoutOutline(scoutKind(uid)),
+    rot: 0,
+    spin: (Math.random() - 0.5) * 0.6,
+    shape: rockShape(uid),
     agent: info.agent || 'agent',
     worker: info.worker || '',
     sub: subLabel(info),
@@ -403,7 +403,7 @@ function connectStream() {
     if (msg.type === 'state') {
       world.state = msg.state;
       world.idleCaption = msg.state.connected
-        ? 'CONNECTED. EVERY SHIP IS A LIVE SANDBOX · EVERY CAPSULE A SNAPSHOT IN STORAGE.'
+        ? 'CONNECTED. EVERY ROCK IS A LIVE SANDBOX · EVERY CAPSULE A SNAPSHOT IN STORAGE.'
         : 'WAITING FOR SUBSTRATE…';
       syncApprovals(msg.state.approvals);
       reconcile();
@@ -524,7 +524,7 @@ function frame(now) {
   for (const r of world.rocks.values()) {
     r.x += r.vx * dt;
     r.y += r.vy * dt;
-    if (!r.frozen) r.rot = steer(r.rot, r.vx, r.vy, dt); // fighters fly nose first; frozen ones hold
+    if (!r.frozen) r.rot += r.spin * dt; // rocks tumble; a frozen one holds still
     if (r.runSince && !r.dying && !r.frozen) r.scale = growScale(now - r.runSince);
     const w = F.x1 - F.x0, h = F.y1 - F.y0;
     if (r.x < F.x0) {
