@@ -4,9 +4,9 @@
 import {
   newQueue, schedule, due, pending, nextSuspend, rockShape, aimAngle, wrapLines, settled,
   newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
-  logLine, planetFor, attribute, growScale, fxDuration, fxLabel, DELAY_MS,
+  logLine, portFor, attribute, growScale, fxDuration, fxLabel, DELAY_MS,
 } from './show.mjs';
-import { setup, draw, saucerSpots, vaultSlot, activeField, NEW, RESUMED, GW } from './render.mjs';
+import { setup, draw, saucerSpots, vaultSlot, activeField, shipPos, NEW, RESUMED, GW } from './render.mjs';
 
 const ACTIVE = new Set(['resuming', 'running', 'suspending']);
 const canvas = document.getElementById('stage');
@@ -34,7 +34,7 @@ const world = {
   log: [], // lines under the snapshot store
   modelLabel: '',
   tourGw: { chapter: 0, llm: 0, tool: 0 },
-  gateFlash: -1e9,
+  shipFlash: -1e9,
 };
 const queue = newQueue();
 const captions = newCaptions();
@@ -254,17 +254,17 @@ function tourAgent() {
 // showGateway draws a request agentgateway handled: a shield around the
 // calling agent's asteroid and a beam through the gate to where it went.
 function showGateway(ev, now) {
-  const planet = planetFor(ev);
-  if (ev.kind === 'llm') world.modelLabel = planet.label;
+  const port = portFor(ev);
+  if (ev.kind === 'llm') world.modelLabel = port.label;
   const rock = ev.direction === 'egress' ? attribute(ev, [...world.rocks.values()]) : null;
   const to = ev.kind === 'chat' ? saucerFor((pools()[0] || {}).name) : null;
   // labels for the same planet stack instead of overlapping
-  const slot = world.gwFx.filter((f) => f.planet === planet.key).length % 4;
+  const slot = world.gwFx.length % 6;
   world.gwFx.push({
-    rock, planet: planet.key, kind: ev.kind, label: fxLabel(ev), slot, born: now, dur: fxDuration(ev.durationMs),
+    rock, port: port.key, kind: ev.kind, label: fxLabel(ev), slot, born: now, dur: fxDuration(ev.durationMs),
     ingress: ev.direction === 'ingress', to: to && { x: to.x, y: to.y + 20 },
   });
-  world.gateFlash = now;
+  world.shipFlash = now;
   logPush({ src: 'gateway', ...ev, agent: ev.agent || rock?.agent }, GW);
   if (world.tour?.kind === 'gateway' && (ev.agent || rock?.agent) === tourAgent()) {
     if (ev.kind === 'llm') world.tourGw.llm++;
@@ -486,6 +486,12 @@ function frame(now) {
     if (k >= 1) { c.done(); return false; }
     return true;
   });
+
+  // the agentgateway ship drifts; it eases to its tour-time lane and back
+  const goal = shipPos(now, !!world.tour);
+  if (!world.shipGw) world.shipGw = goal;
+  const e = Math.min(1, dt * 1.2);
+  world.shipGw = { x: world.shipGw.x + (goal.x - world.shipGw.x) * e, y: world.shipGw.y + (goal.y - world.shipGw.y) * e };
 
   // autopilot: drift on a slow figure-eight, turn toward the next suspend
   const t = now / 1000;

@@ -129,12 +129,11 @@ test('log lines: short, real, one per event', async () => {
   assert.equal(logLine({ src: 'gateway', kind: 'chat', durationMs: 4273, at }), '01:23:45 ⬡ CHAT IN → AGENT 4.3S');
 });
 
-test('gateway requests map to the outside world they reach', async () => {
-  const { planetFor } = await import('./show.mjs');
-  assert.equal(planetFor({ kind: 'llm', target: 'qwen', model: 'qwen3:8b' }).key, 'model');
-  assert.equal(planetFor({ kind: 'llm', target: 'qwen', model: 'qwen3:8b' }).label, 'QWEN3:8B');
-  assert.equal(planetFor({ kind: 'tool', target: 'kagent-tools' }).key, 'tools');
-  assert.equal(planetFor({ kind: 'chat', target: 'kagent-a2a' }).key, 'people');
+test('gateway requests dock at the matching port on the agentgateway ship', async () => {
+  const { portFor } = await import('./show.mjs');
+  assert.deepEqual(portFor({ kind: 'llm', target: 'qwen', model: 'qwen3:8b' }), { key: 'llm', label: 'QWEN3:8B' });
+  assert.deepEqual(portFor({ kind: 'tool', target: 'kagent-tools' }), { key: 'mcp', label: 'K8S TOOLS' });
+  assert.deepEqual(portFor({ kind: 'chat', target: 'kagent-a2a' }), { key: 'a2a', label: 'CHATS IN' });
 });
 
 test('gateway chapter live line counts this agent\'s gateway calls', async () => {

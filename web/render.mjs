@@ -2,15 +2,29 @@
 
 export const W = 1280;
 export const H = 720;
-// The left strip is the outside world (your model, tools, people chatting in)
-// behind agentgateway's gate; asteroids fly to its right.
-export const FIELD = { x0: 200, x1: 990, y0: 150, y1: 610 };
-export const GATE = { x: 176, y0: 158, y1: 604 };
-export const PLANETS = {
-  model: { x: 86, y: 248, r: 30 },
-  tools: { x: 86, y: 400, r: 24 },
-  people: { x: 86, y: 540, r: 20 },
+export const FIELD = { x0: 20, x1: 990, y0: 150, y1: 610 };
+// The agentgateway security ship floats through the field like everything
+// else; every call in or out of a sandbox docks at one of its ports.
+const PORT_OFFSETS = {
+  llm: { dx: -70, dy: 36, name: 'LLM' },
+  mcp: { dx: 0, dy: 42, name: 'MCP' },
+  a2a: { dx: 70, dy: 36, name: 'A2A' },
 };
+
+// shipPos is where the ship drifts to at time t: a slow loop through the
+// field, kept right of the tour card while the tour is open.
+export function shipPos(t, tourOpen) {
+  const s = t / 1000;
+  const [cx, ax] = tourOpen ? [745, 120] : [515, 340];
+  return { x: cx + ax * Math.sin(s * 0.06), y: 330 + 150 * Math.sin(s * 0.11 + 1) };
+}
+
+// portsAt gives the ship's ports for a ship position.
+export function portsAt(pos) {
+  const out = {};
+  for (const [k, o] of Object.entries(PORT_OFFSETS)) out[k] = { x: pos.x + o.dx, y: pos.y + o.dy, r: 9, name: o.name };
+  return out;
+}
 export const VAULT = { x: 1010, y: 150, w: 250, h: 450 };
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const INK = '#fff';
@@ -227,7 +241,7 @@ export function draw(ctx, world, now) {
   for (const s of saucerSpots(st.snapshot?.pools || [])) drawSaucer(ctx, s, busy);
   drawVault(ctx, world.vault.size);
   drawLog(ctx, world.log || []);
-  drawOutside(ctx, world, now);
+  drawShipGateway(ctx, world, now);
   drawLegend(ctx);
   for (const r of world.rocks.values()) drawRock(ctx, r);
   drawGatewayFx(ctx, world, now);
@@ -302,7 +316,7 @@ function drawFocus(ctx, world, now) {
   }
 }
 
-export const CARD = { x: 210, y: 150, w: 450 };
+export const CARD = { x: 30, y: 150, w: 450 };
 
 // wrapPx splits text into lines no wider than width at the given style.
 function wrapPx(ctx, str, width, size, spacing) {
@@ -363,7 +377,7 @@ function drawLegend(ctx) {
   const items = [[NEW, '● NEW SESSION'], [RESUMED, '● RESUMED'], [GW, '⬡ AGENTGATEWAY']];
   let x = 20;
   for (const [c, label] of items) {
-    text(ctx, label, x, 64, { size: 9, spacing: 1, color: c });
+    text(ctx, label, x, 614, { size: 9, spacing: 1, color: c });
     ctx.font = `9px ${FONT}`;
     x += ctx.measureText(label).width + label.length + 18;
   }
@@ -379,49 +393,63 @@ function hexagon(ctx, x, y, r) {
   ctx.closePath();
 }
 
-function planet(ctx, p, label, sub, color) {
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-  stroke(ctx, color, 1.4);
-  ctx.beginPath();
-  ctx.ellipse(p.x, p.y, p.r * 1.6, p.r * 0.38, -0.35, 0, Math.PI * 2);
-  stroke(ctx, color, 1);
-  text(ctx, label, p.x, p.y + p.r + 18, { size: 9, align: 'center', spacing: 1, color });
-  if (sub) text(ctx, sub, p.x, p.y + p.r + 30, { size: 8, align: 'center', spacing: 1, color: DIM });
+// activePorts lists the ports a call is passing through right now.
+function activePorts(world, now) {
+  const on = new Set();
+  for (const fx of world.gwFx || []) if (now - fx.born < fx.dur * 0.7) on.add(fx.port);
+  return on;
 }
 
-// drawOutside draws the outside world and agentgateway's gate between it and
-// the sandboxes. Dim until the gateway has reported a request.
-function drawOutside(ctx, world, now) {
+// drawShipGateway draws the agentgateway security ship: a shielded cruiser
+// with LLM, MCP and A2A ports. Dim until the gateway has reported a request.
+function drawShipGateway(ctx, world, now) {
   const seen = world.state?.gateway?.seen;
   const prev = ctx.globalAlpha;
   ctx.globalAlpha = prev * (seen ? 1 : 0.35);
-  text(ctx, 'OUTSIDE', 86, 170, { size: 9, align: 'center', spacing: 2, color: DIM });
-  planet(ctx, PLANETS.model, world.modelLabel || 'MODEL', 'LLM', INK);
-  planet(ctx, PLANETS.tools, 'K8S TOOLS', 'MCP', INK);
-  planet(ctx, PLANETS.people, 'CHATS IN', 'A2A', INK);
-  // the gate: a column of small hexagons
-  const flash = Math.max(0, 1 - (now - (world.gateFlash || -1e9)) / 500);
-  for (let y = GATE.y0; y <= GATE.y1; y += 18) {
-    hexagon(ctx, GATE.x, y, 6);
-    stroke(ctx, GW, flash > 0 ? 1 + flash * 1.5 : 1);
+  const pos = world.shipGw || shipPos(now, false);
+  const { x, y } = pos;
+  // shield bubble, flaring when a call passes through
+  const flare = Math.max(0, 1 - (now - (world.shipFlash || -1e9)) / 700);
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath();
+  ctx.ellipse(x, y + 4, 128 + flare * 6, 50 + flare * 3, 0, 0, Math.PI * 2);
+  stroke(ctx, GW, 1 + flare * 1.6);
+  ctx.setLineDash([]);
+  // hull and bridge
+  ctx.beginPath();
+  for (const [i, [px, py]] of [[-104, 0], [-78, -20], [78, -20], [104, 0], [78, 20], [-78, 20]].entries()) {
+    i ? ctx.lineTo(x + px, y + py) : ctx.moveTo(x + px, y + py);
   }
-  ctx.save();
-  ctx.translate(GATE.x - 14, (GATE.y0 + GATE.y1) / 2);
-  ctx.rotate(-Math.PI / 2);
-  text(ctx, seen ? 'AGENTGATEWAY' : 'AGENTGATEWAY · NOT REPORTING', 0, 0, { size: 9, align: 'center', spacing: 3, color: GW });
-  ctx.restore();
+  ctx.closePath();
+  ctx.moveTo(x - 28, y - 20); ctx.lineTo(x - 16, y - 33); ctx.lineTo(x + 16, y - 33); ctx.lineTo(x + 28, y - 20);
+  ctx.moveTo(x - 104, y); ctx.lineTo(x + 104, y);
+  stroke(ctx, INK, 1.5);
+  hexagon(ctx, x, y - 8, 7); // the shield crest
+  stroke(ctx, GW, 1.4);
+  text(ctx, seen ? 'AGENTGATEWAY' : 'AGENTGATEWAY · NOT REPORTING', x, y - 42, { size: 11, align: 'center', spacing: 3, color: GW });
+  text(ctx, 'KEYS · POLICY · AUDIT', x, y + 12, { size: 7, align: 'center', spacing: 1, color: DIM });
+  // ports
+  const on = activePorts(world, now);
+  const sub = { llm: world.modelLabel || 'MODEL', mcp: 'K8S TOOLS', a2a: 'CHATS IN' };
+  for (const [k, p] of Object.entries(portsAt(pos))) {
+    hexagon(ctx, p.x, p.y, p.r);
+    if (on.has(k)) { ctx.fillStyle = GW; ctx.fill(); }
+    stroke(ctx, GW, 1.4);
+    text(ctx, p.name, p.x, p.y + 22, { size: 8, align: 'center', spacing: 1, color: on.has(k) ? GW : INK });
+    text(ctx, sub[k], p.x, p.y + 32, { size: 7, align: 'center', spacing: 1, color: DIM });
+  }
   ctx.globalAlpha = prev;
 }
 
-// fxPath is the route a gateway request takes on screen.
-function fxPath(fx) {
-  const p = PLANETS[fx.planet];
-  const end = fx.rock ? { x: fx.rock.x, y: fx.rock.y } : fx.to || { x: FIELD.x0 + 60, y: p.y };
-  const gy = Math.max(GATE.y0, Math.min(GATE.y1, end.y));
-  return fx.ingress
-    ? [{ x: p.x + p.r, y: p.y }, { x: GATE.x, y: gy }, end]
-    : [end, { x: GATE.x, y: gy }, { x: p.x + p.r, y: p.y }];
+// fxPath is the route a call takes: from the asteroid up to its port, or for
+// a chat coming in, from the A2A port down to the worker pool. A gentle arc.
+function fxPath(fx, ports) {
+  const p = ports[fx.port];
+  const end = fx.rock ? { x: fx.rock.x, y: fx.rock.y } : fx.to || { x: p.x + 80, y: FIELD.y0 + 60 };
+  const [a, b] = fx.ingress ? [{ x: p.x, y: p.y + p.r }, end] : [end, { x: p.x, y: p.y + p.r }];
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  const nx = -(b.y - a.y), ny = b.x - a.x, len = Math.hypot(nx, ny) || 1;
+  return [a, { x: mx + (nx / len) * 26, y: my + (ny / len) * 26 }, b];
 }
 
 function along(pts, k) {
@@ -450,15 +478,6 @@ function dotAt(ctx, pt, r, color) {
   ctx.fill();
 }
 
-// gateCell lights the hexagon where a call crosses the gateway.
-function gateCell(ctx, y, a) {
-  const cy = GATE.y0 + Math.round((Math.max(GATE.y0, Math.min(GATE.y1, y)) - GATE.y0) / 18) * 18;
-  hexagon(ctx, GATE.x, cy, 7);
-  ctx.globalAlpha *= a;
-  ctx.fillStyle = GW;
-  ctx.fill();
-}
-
 // lightning draws a crackling bolt along a path (fresh jitter every frame).
 function lightning(ctx, pts) {
   ctx.beginPath();
@@ -475,26 +494,27 @@ function lightning(ctx, pts) {
   stroke(ctx, GW, 1.6);
 }
 
-function planetPulse(ctx, p, k) {
+function portPulse(ctx, p, k) {
   ctx.beginPath();
-  ctx.arc(p.x, p.y, p.r + 4 + k * 22, 0, Math.PI * 2);
+  ctx.arc(p.x, p.y, p.r + 3 + k * 18, 0, Math.PI * 2);
   ctx.globalAlpha *= 1 - k;
   stroke(ctx, GW, 1.6);
 }
 
 // drawGatewayFx animates each request agentgateway handled, by kind:
-//  model call: a packet train out, the planet pulses, a longer train back
-//  tool call:  a crackling bolt out, a result box back
-//  chat in:    a comet from CHATS IN through the gate to the pool
+//  model call: a packet train up to the LLM port, it pulses, a longer train back
+//  tool call:  a crackling bolt up to the MCP port, a result box back
+//  chat in:    a comet from the A2A port down into the worker pool
 function drawGatewayFx(ctx, world, now) {
   const base = ctx.globalAlpha;
   for (const fx of world.gwFx || []) {
     const k = (now - fx.born) / fx.dur;
     if (k < 0 || k > 1) continue;
     const fade = 1 - Math.max(0, (k - 0.8) / 0.2);
-    const pts = fxPath(fx);
+    const ports = portsAt(world.shipGw || shipPos(now, false));
+    const pts = fxPath(fx, ports);
     const back = [...pts].reverse();
-    const p = PLANETS[fx.planet];
+    const p = ports[fx.port];
     ctx.save();
     // faint guide line
     ctx.globalAlpha = base * fade * 0.22;
@@ -511,7 +531,7 @@ function drawGatewayFx(ctx, world, now) {
           if (t > 0 && t < 1) dotAt(ctx, along(pts, t), 2.6, GW);
         }
       }
-      if (k > 0.4 && k < 0.7) { ctx.save(); planetPulse(ctx, p, (k - 0.4) / 0.3); ctx.restore(); }
+      if (k > 0.4 && k < 0.7) { ctx.save(); portPulse(ctx, p, (k - 0.4) / 0.3); ctx.restore(); }
       if (k > 0.55) {
         for (let i = 0; i < 9; i++) {
           const t = (k - 0.55) / 0.45 - i * 0.045;
@@ -520,7 +540,7 @@ function drawGatewayFx(ctx, world, now) {
       }
     } else if (fx.kind === 'tool') {
       if (k < 0.35 && Math.floor(now / 60) % 3 !== 0) lightning(ctx, pts);
-      if (k > 0.3 && k < 0.55) { ctx.save(); planetPulse(ctx, p, (k - 0.3) / 0.25); ctx.restore(); }
+      if (k > 0.3 && k < 0.55) { ctx.save(); portPulse(ctx, p, (k - 0.3) / 0.25); ctx.restore(); }
       if (k > 0.45) {
         const b = along(back, Math.min(1, (k - 0.45) / 0.45));
         ctx.beginPath();
@@ -537,18 +557,17 @@ function drawGatewayFx(ctx, world, now) {
       }
       ctx.globalAlpha = base * fade;
     }
-    // the gate cell this call crossed
-    ctx.save();
-    ctx.globalAlpha = base * fade * (1 - k) * 0.9;
-    gateCell(ctx, pts[1].y, 1);
-    ctx.restore();
     // the shield: the call left this sandbox only through the gateway
     if (fx.rock && !fx.ingress) {
       const sc = fx.rock.scale || 1;
       hexagon(ctx, fx.rock.x, fx.rock.y, 34 * sc + Math.sin(k * Math.PI * 6) * 2);
       stroke(ctx, GW, 1.8);
     }
-    text(ctx, fx.label, GATE.x + 14, p.y - p.r + 4 + (fx.slot || 0) * 11, { size: 8, spacing: 1, color: GW });
+    // a running feed of calls beside the ship (on whichever side has room)
+    const sp = world.shipGw || shipPos(now, false);
+    const right = sp.x < 640;
+    text(ctx, fx.label, sp.x + (right ? 146 : -146), sp.y - 30 + (fx.slot || 0) * 12,
+      { size: 8, spacing: 1, color: GW, align: right ? 'left' : 'right' });
     ctx.restore();
   }
   ctx.globalAlpha = base;

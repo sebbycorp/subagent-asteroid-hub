@@ -215,11 +215,11 @@ export function logLine(it) {
   }
 }
 
-// planetFor names the outside-world destination a gateway request reaches.
-export function planetFor(ev) {
-  if (ev.kind === 'chat') return { key: 'people', label: 'CHATS IN' };
-  if (ev.kind === 'tool') return { key: 'tools', label: 'K8S TOOLS' };
-  return { key: 'model', label: String(ev.model || ev.target).toUpperCase() };
+// portFor names the port on the agentgateway ship a request docks at.
+export function portFor(ev) {
+  if (ev.kind === 'chat') return { key: 'a2a', label: 'CHATS IN' };
+  if (ev.kind === 'tool') return { key: 'mcp', label: 'K8S TOOLS' };
+  return { key: 'llm', label: String(ev.model || ev.target).toUpperCase() };
 }
 
 // attribute picks the asteroid a gateway request belongs to. Tool calls carry
