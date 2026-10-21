@@ -42,22 +42,49 @@ test('the kagent ship glides side to side along the top, staying in the field', 
   assert.ok(Math.max(...xs) - Math.min(...xs) > 300, 'moves side to side');
 });
 
-test('the fighter flies opposite the agentgateway planet and never comes close', async () => {
-  const { gatewayPos, fighterPos, SHIELD_R, CARD, FIELD } = await import('./render.mjs');
+test('the alien gunner holds the bottom-left corner, clear of the planet', async () => {
+  const { gatewayPos, GUNNER, GUNNER_SCALE, muzzleAt, SHIELD_R, FIELD } = await import('./render.mjs');
+  assert.ok(GUNNER.x <= FIELD.x0 + 120 && GUNNER.y >= FIELD.y1 - 90, `gunner at ${GUNNER.x},${GUNNER.y}`);
+  assert.ok(GUNNER_SCALE >= 1.5, 'a big cannon');
+  assert.ok(GUNNER.y + 34 * GUNNER_SCALE <= FIELD.y1 - 10, 'its base sits inside the field, above the legend');
+  assert.ok(GUNNER.x - 50 * GUNNER_SCALE >= 0, 'its ground stays on screen');
+  const m = muzzleAt({ ...GUNNER, a: 0, flash: 0 });
+  assert.ok(Math.abs(m.x - (GUNNER.x + 50 * GUNNER_SCALE)) < 1e-9, 'shots leave from the emitter at the end of the rails');
   let minD = Infinity;
   for (let t = 0; t < 900000; t += 250) {
     for (const tour of [false, true]) {
-      const g = gatewayPos(t, tour), f = fighterPos(t, tour);
-      minD = Math.min(minD, Math.hypot(g.x - f.x, g.y - f.y));
-      assert.ok(f.x >= FIELD.x0 + 20 && f.x <= FIELD.x1 - 20 && f.y >= FIELD.y0 + 20 && f.y <= FIELD.y1 - 20, `fighter out of field ${f.x},${f.y}`);
-      if (tour) assert.ok(f.x >= CARD.x + CARD.w + 20, `fighter over the tour card at ${f.x}`);
+      const g = gatewayPos(t, tour);
+      minD = Math.min(minD, Math.hypot(g.x - GUNNER.x, g.y - GUNNER.y));
     }
   }
   assert.ok(minD >= SHIELD_R + 60, `closest approach ${minD.toFixed(0)}px`);
-  // moving the opposite way: when the planet heads right, the fighter heads left
-  const g0 = gatewayPos(1000, false), g1 = gatewayPos(2000, false);
-  const f0 = fighterPos(1000, false), f1 = fighterPos(2000, false);
-  assert.ok(Math.sign(g1.x - g0.x) === -Math.sign(f1.x - f0.x));
+});
+
+test('the cannon swings from straight up to just below level, never through the ground', async () => {
+  const { cannonAim, CANNON_MIN, CANNON_MAX } = await import('./render.mjs');
+  const g = { x: 100, y: 500 };
+  assert.ok(Math.abs(cannonAim(g, { x: 100, y: 100 }) + Math.PI / 2) < 1e-9, 'straight up');
+  assert.ok(Math.abs(cannonAim(g, { x: 500, y: 100 }) + Math.PI / 4) < 1e-9, 'up and right');
+  assert.equal(cannonAim(g, { x: 500, y: 700 }), CANNON_MAX, 'low right: as low as it goes');
+  assert.equal(cannonAim(g, { x: 20, y: 600 }), CANNON_MIN, 'behind it, low: back to its highest');
+  assert.equal(cannonAim(g, { x: 20, y: 100 }), CANNON_MIN, 'up and behind: its highest');
+});
+
+test('the kagent robot and its rail cannon draw without leaking canvas state, firing or not', async () => {
+  const { drawGunner } = await import('./render.mjs');
+  for (const flash of [0, 1]) {
+    let depth = 0, strokes = 0;
+    const ctx = new Proxy({ globalAlpha: 1 }, {
+      get(t, k) {
+        if (k in t) return t[k];
+        return () => { if (k === 'save') depth++; if (k === 'restore') depth--; if (k === 'stroke') strokes++; };
+      },
+      set(t, k, v) { t[k] = v; return true; },
+    });
+    drawGunner(ctx, { x: 80, y: 560, a: -0.8, flash, target: { x: 400, y: 200 } }, 1000);
+    assert.equal(depth, 0);
+    assert.ok(strokes >= 14, 'the kagent robot, a rail cannon, its turret');
+  }
 });
 
 test('the moon hides when it passes behind the planet', async () => {

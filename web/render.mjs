@@ -19,20 +19,34 @@ export function gatewayPos(t, tourOpen) {
   return { x: cx + ax * Math.sin(a), y: 362 + 118 * Math.cos(a) };
 }
 
-// The planet and the fighter share one slow orbit, on opposite sides of it:
-// when one swings right the other swings left, when one is high the other is
-// low, so they never come near each other.
+// The planet drifts on one slow loop through the field.
 function orbitPhase(t) {
   return (t / 1000) * 0.05;
 }
 
-// fighterPos is where the fighter patrols: opposite the agentgateway planet
-// (and, while the tour card is open, mirrored within the field beside it).
-export function fighterPos(t, tourOpen) {
-  const a = orbitPhase(t);
-  const y = 400 - 110 * Math.cos(a);
-  if (tourOpen) return { x: 1370 - gatewayPos(t, true).x, y }; // mirrored within the planet's tour lane
-  return { x: 505 - 300 * Math.sin(a), y };
+// GUNNER is where the kagent robot and its rail cannon sit: the bottom-left
+// corner of the field, which the planet's loop never comes near.
+export const GUNNER = { x: 105, y: 545 };
+export const GUNNER_SCALE = 1.6; // a big cannon
+
+// muzzleAt is where a shot leaves the cannon: the emitter between the rails.
+export function muzzleAt(ship) {
+  const L = 50 * GUNNER_SCALE;
+  return { x: ship.x + Math.cos(ship.a) * L, y: ship.y - 2 * GUNNER_SCALE + Math.sin(ship.a) * L };
+}
+
+// The cannon swings from just past straight up (CANNON_MIN) to just below
+// level (CANNON_MAX); it can't aim behind itself or into the ground.
+export const CANNON_MIN = -1.75;
+export const CANNON_MAX = 0.25;
+
+// cannonAim is the barrel angle to hit target from g, kept within the
+// cannon's swing: a target out of reach low and ahead gets its lowest angle,
+// anything behind it gets its highest.
+export function cannonAim(g, target) {
+  const a = Math.atan2(target.y - g.y, target.x - g.x);
+  if (a >= CANNON_MIN && a <= CANNON_MAX) return a;
+  return a > CANNON_MAX && a <= Math.PI / 2 ? CANNON_MAX : CANNON_MIN;
 }
 
 // moonAt is where the moon riding the planet's tilted ring is drawn at angle
@@ -260,21 +274,148 @@ function drawPilot(ctx, x, y, now, ap) {
   text(ctx, lines[1], sx + 7, sy + 23, { size: 8, spacing: 1, color: INK });
 }
 
-// drawShip draws our ship, the one that marks each freeze: the classic
-// vector rocket with a flickering engine flame.
-export function drawShip(ctx, ship) {
-  const pts = [[16, 0], [-11, -9], [-6, 0], [-11, 9]];
-  poly(ctx, pts, ship.x, ship.y, ship.a);
-  stroke(ctx);
-  const f = 7 + Math.random() * 7;
-  poly(ctx, [[-7, -3.5], [-7 - f, 0], [-7, 3.5]], ship.x, ship.y, ship.a);
-  stroke(ctx, RESUMED, 1);
-  if (ship.flash > 0) {
+// drawGunner draws the kagent robot in the bottom-left corner at the
+// controls of a neon rail cannon on a turret, all in vector lines. ship.a is
+// the barrel angle and ship.target (if any) gets a dotted red targeting
+// laser; ship.flash (1 → 0 just after a shot) kicks the rails back, flares a
+// cyan plasma burst with a shockwave, and jolts the robot.
+export function drawGunner(ctx, ship, now) {
+  const glow = (color, blur) => { ctx.shadowColor = color; ctx.shadowBlur = blur; };
+  const flash = ship.flash || 0;
+  const a = ship.a;
+  // the targeting laser, in screen space so it stays thin
+  if (ship.target) {
+    const m = muzzleAt(ship);
+    ctx.save();
+    ctx.setLineDash([2, 5]);
+    ctx.globalAlpha *= 0.55;
     ctx.beginPath();
-    ctx.moveTo(ship.x + Math.cos(ship.a) * 16, ship.y + Math.sin(ship.a) * 16);
-    ctx.lineTo(ship.x + Math.cos(ship.a) * 26, ship.y + Math.sin(ship.a) * 26);
-    stroke(ctx, INK, 1);
+    ctx.moveTo(m.x, m.y); ctx.lineTo(ship.target.x, ship.target.y);
+    stroke(ctx, RED, 1);
+    ctx.restore();
   }
+  ctx.save();
+  ctx.translate(ship.x, ship.y);
+  ctx.scale(GUNNER_SCALE, GUNNER_SCALE);
+  const recoil = -flash * 6;
+  const pulse = 0.5 + 0.5 * Math.sin(now / 220);
+  // the ground and the turret platform, with blinking running lights
+  ctx.beginPath();
+  ctx.moveTo(-50, 34); ctx.lineTo(-42, 22); ctx.lineTo(-30, 18); ctx.lineTo(34, 18); ctx.lineTo(46, 22); ctx.lineTo(54, 34);
+  stroke(ctx, DIM, 1);
+  ctx.beginPath();
+  ctx.moveTo(-26, 18); ctx.lineTo(-20, 9); ctx.lineTo(22, 9); ctx.lineTo(28, 18);
+  ctx.moveTo(-18, 13.5); ctx.lineTo(20, 13.5);
+  stroke(ctx, INK, 1.3);
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.arc(-10 + i * 8, 15.8, 1, 0, Math.PI * 2);
+    const on = (Math.floor(now / 250) + i) % 4 === 0;
+    if (on) glow(NEW, 6);
+    ctx.fillStyle = on ? NEW : DIM;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  // the turret dome
+  ctx.beginPath();
+  ctx.arc(0, 9, 12, Math.PI, Math.PI * 2);
+  stroke(ctx, INK, 1.4);
+  ctx.beginPath();
+  ctx.arc(0, 9, 8, Math.PI * 1.15, Math.PI * 1.85);
+  stroke(ctx, DIM, 1);
+  // the rail cannon, in its own frame
+  ctx.save();
+  ctx.translate(0, -2);
+  ctx.rotate(a);
+  ctx.translate(recoil, 0);
+  ctx.beginPath(); // rear housing with an angled back
+  ctx.moveTo(-14, -4); ctx.lineTo(-10, -7); ctx.lineTo(8, -7); ctx.lineTo(8, 7); ctx.lineTo(-10, 7); ctx.lineTo(-14, 4); ctx.closePath();
+  stroke(ctx, INK, 1.4);
+  ctx.beginPath(); // vents on the housing
+  for (const vx of [-6, -2, 2]) { ctx.moveTo(vx, -4); ctx.lineTo(vx + 2, 4); }
+  stroke(ctx, DIM, 0.9);
+  ctx.beginPath(); // twin rails
+  ctx.rect(8, -5, 40, 2.4);
+  ctx.rect(8, 2.6, 40, 2.4);
+  stroke(ctx, INK, 1.2);
+  ctx.beginPath(); // cooling fins
+  for (const fx of [12, 17, 22]) { ctx.moveTo(fx, -9); ctx.lineTo(fx, -5); ctx.moveTo(fx, 5); ctx.lineTo(fx, 9); }
+  stroke(ctx, INK, 1.1);
+  ctx.beginPath(); // the charged core between the rails
+  ctx.moveTo(10, 0); ctx.lineTo(46, 0);
+  glow(NEW, 6 + pulse * 6);
+  stroke(ctx, NEW, 0.9 + pulse * 0.6);
+  for (const cx of [30, 35, 40]) { // energy coils
+    ctx.beginPath();
+    ctx.ellipse(cx, 0, 1.4, 6.2, 0, 0, Math.PI * 2);
+    stroke(ctx, NEW, 1);
+  }
+  ctx.shadowBlur = 0;
+  ctx.beginPath(); // the forked emitter
+  ctx.moveTo(48, -5); ctx.lineTo(52, -3); ctx.moveTo(48, 5); ctx.lineTo(52, 3);
+  stroke(ctx, INK, 1.2);
+  ctx.beginPath(); // the charge, building between shots
+  ctx.arc(50, 0, 1.2 + pulse * 1.2, 0, Math.PI * 2);
+  glow(NEW, 10);
+  ctx.fillStyle = NEW;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  if (flash > 0) {
+    ctx.beginPath(); // the plasma burst
+    for (let i = 0; i < 8; i++) {
+      const sa = (i / 8) * Math.PI * 2;
+      const len = 4 + flash * 14 * (i % 2 ? 0.55 : 1);
+      ctx.moveTo(50 + Math.cos(sa) * 3, Math.sin(sa) * 3);
+      ctx.lineTo(50 + Math.cos(sa) * len, Math.sin(sa) * len);
+    }
+    glow(NEW, 12);
+    stroke(ctx, NEW, 1.4);
+    ctx.shadowBlur = 0;
+    const prev = ctx.globalAlpha;
+    ctx.globalAlpha = prev * flash;
+    ctx.beginPath(); // a shockwave ring, widening as the flash fades
+    ctx.ellipse(52, 0, 3 + (1 - flash) * 10, 5 + (1 - flash) * 16, 0, 0, Math.PI * 2);
+    stroke(ctx, INK, 1);
+    ctx.globalAlpha = prev;
+  }
+  ctx.restore();
+  // the hub the cannon pivots on
+  ctx.beginPath();
+  ctx.arc(0, -2, 3, 0, Math.PI * 2);
+  glow(NEW, 8);
+  ctx.fillStyle = NEW;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  stroke(ctx, INK, 1);
+  // the kagent robot at the controls: the kagent mark with antennae and legs,
+  // one arm on the cannon's grip; it jolts when it fires
+  const S = 24;
+  const jolt = flash * 1.5;
+  const rx = -30 - jolt, ry = -4 + Math.sin(now / 400) * 1;
+  ctx.beginPath(); // legs, dangling to the platform
+  ctx.moveTo(rx - 4, ry + S / 2 - 2); ctx.lineTo(rx - 6, ry + S / 2 + 8);
+  ctx.moveTo(rx + 4, ry + S / 2 - 2); ctx.lineTo(rx + 6, ry + S / 2 + 8);
+  stroke(ctx, KAGENT_PURPLE, 1.4);
+  ctx.beginPath(); // antennae
+  ctx.moveTo(rx - 4, ry - S / 2 + 3); ctx.lineTo(rx - 7, ry - S / 2 - 5);
+  ctx.moveTo(rx + 4, ry - S / 2 + 3); ctx.lineTo(rx + 7, ry - S / 2 - 5);
+  stroke(ctx, KAGENT_PURPLE, 1.2);
+  for (const ax of [-7, 7]) {
+    ctx.beginPath();
+    ctx.arc(rx + ax, ry - S / 2 - 5.5, 1.6, 0, Math.PI * 2);
+    ctx.fillStyle = flash > 0.2 ? NEW : Math.floor(now / 400) % 2 ? ALIEN : KAGENT_PURPLE;
+    ctx.fill();
+  }
+  if (KAGENT.complete && KAGENT.naturalWidth) ctx.drawImage(KAGENT, rx - S / 2, ry - S / 2, S, S);
+  else { ctx.beginPath(); ctx.rect(rx - 8, ry - 7, 16, 14); stroke(ctx, KAGENT_PURPLE, 1.4); }
+  const grip = { x: Math.cos(a) * (-14 + recoil) - Math.sin(a) * 4, y: -2 + Math.sin(a) * (-14 + recoil) + Math.cos(a) * 4 };
+  ctx.beginPath(); // the arm on the grip
+  ctx.moveTo(rx + S / 2 - 2, ry + 3); ctx.lineTo(grip.x, grip.y);
+  stroke(ctx, KAGENT_PURPLE, 1.4);
+  ctx.beginPath();
+  ctx.arc(grip.x, grip.y, 1.6, 0, Math.PI * 2);
+  stroke(ctx, KAGENT_PURPLE, 1.2);
+  ctx.restore();
 }
 
 export function vaultSlot(i) {
@@ -382,11 +523,20 @@ export function draw(ctx, world, now) {
     stroke(ctx);
   }
   ctx.globalAlpha = dim ? 0.35 : 1;
-  for (const b of world.bullets) {
+  for (const b of world.bullets) { // plasma bolts, with a glowing trail
+    const dx = b.target.x - b.from.x, dy = b.target.y - b.from.y, d = Math.hypot(dx, dy) || 1;
+    ctx.save();
+    ctx.shadowColor = NEW;
+    ctx.shadowBlur = 10;
     ctx.beginPath();
-    ctx.arc(b.x, b.y, 1.8, 0, Math.PI * 2);
+    ctx.moveTo(b.x - (dx / d) * 22, b.y - (dy / d) * 22);
+    ctx.lineTo(b.x, b.y);
+    stroke(ctx, NEW, 2);
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 3.2, 0, Math.PI * 2);
     ctx.fillStyle = INK;
     ctx.fill();
+    ctx.restore();
   }
   for (const c of world.capsules) capsule(ctx, c.x, c.y);
   for (const f of world.flashes) {
@@ -398,7 +548,7 @@ export function draw(ctx, world, now) {
     ctx.globalAlpha = dim ? 0.35 : 1;
   }
   drawFocus(ctx, world, now);
-  drawShip(ctx, world.ship);
+  drawGunner(ctx, world.ship, now);
   drawCaption(ctx, world.captionLines, st.waves?.note, world.help);
   ctx.globalAlpha = 1;
 

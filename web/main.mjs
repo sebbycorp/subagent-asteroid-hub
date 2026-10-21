@@ -6,7 +6,7 @@ import {
   newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
   logLine, portFor, attribute, growScale, fxDuration, fxLabel, llmTiming, DELAY_MS,
 } from './show.mjs';
-import { setup, draw, saucerSpots, vaultSlot, activeField, gatewayPos, fighterPos, NEW, RESUMED, GW, ALIEN } from './render.mjs';
+import { setup, draw, saucerSpots, vaultSlot, activeField, gatewayPos, GUNNER, cannonAim, muzzleAt, NEW, RESUMED, GW, ALIEN } from './render.mjs';
 
 const ACTIVE = new Set(['resuming', 'running', 'suspending']);
 const canvas = document.getElementById('stage');
@@ -20,7 +20,7 @@ const world = {
   bullets: [],
   capsules: [],
   flashes: [],
-  ship: { x: 500, y: 470, a: -Math.PI / 2, flash: 0 },
+  ship: { x: GUNNER.x, y: GUNNER.y, a: -0.8, flash: 0 }, // the kagent robot's rail cannon
   captionLines: [],
   idleCaption: 'WAITING FOR SUBSTRATE…',
   help: '',
@@ -209,10 +209,10 @@ function show(ev, now) {
         break;
       }
       r.dying = true;
-      const sx = world.ship.x + Math.cos(world.ship.a) * 16;
-      const sy = world.ship.y + Math.sin(world.ship.a) * 16;
+      const { x: sx, y: sy } = muzzleAt(world.ship);
       world.ship.flash = 1;
-      world.bullets.push({ x: sx, y: sy, from: { x: sx, y: sy }, target: r, t0: now, dur: 220, hit: () => {
+      const dur = 150 + Math.hypot(r.x - sx, r.y - sy) * 0.35; // a cannonball takes a moment to get there
+      world.bullets.push({ x: sx, y: sy, from: { x: sx, y: sy }, target: r, t0: now, dur, hit: () => {
         explode(r, performance.now());
         world.rocks.delete(uid);
         fly({ x: r.x, y: r.y }, vaultPos(), 900, store);
@@ -567,13 +567,9 @@ function frame(now) {
   const e = Math.min(1, dt * 1.2);
   world.gwPos = { x: world.gwPos.x + (goal.x - world.gwPos.x) * e, y: world.gwPos.y + (goal.y - world.gwPos.y) * e };
 
-  // autopilot: drift on a slow figure-eight, turn toward the next suspend
+  // the kagent robot swings its cannon toward the next suspend (or the nearest rock)
   const t = now / 1000;
   const ship = world.ship;
-  // patrol opposite the agentgateway planet, easing between tour lanes too
-  const fp = fighterPos(now, !!world.tour);
-  ship.x += (fp.x - ship.x) * Math.min(1, dt * 1.2);
-  ship.y += (fp.y - ship.y) * Math.min(1, dt * 1.2);
   const targetUid = nextSuspend(queue);
   let target = targetUid && world.rocks.get(targetUid);
   if (!target) {
@@ -583,11 +579,9 @@ function frame(now) {
       if (d < best && !r.dying) { best = d; target = r; }
     }
   }
-  if (target) {
-    let diff = aimAngle(ship, target) - ship.a;
-    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-    ship.a += Math.max(-3 * dt, Math.min(3 * dt, diff));
-  }
+  const want = target ? cannonAim(ship, target) : -0.8 + 0.25 * Math.sin(t * 0.6); // idle: a slow sweep
+  ship.target = target ? { x: target.x, y: target.y } : null; // the targeting laser
+  ship.a += Math.max(-3 * dt, Math.min(3 * dt, want - ship.a));
   ship.flash = Math.max(0, ship.flash - dt * 4);
 
   draw(ctx, world, now);
