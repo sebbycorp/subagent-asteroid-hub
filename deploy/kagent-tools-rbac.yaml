@@ -1,24 +1,10 @@
 # Helm values for kagent: the built-in tool server (kagent-tools) ships as
-# cluster-admin. Narrow it: read the usual resources, never Secrets (the
-# chart's allowSecrets stays false), and change only ordinary workloads, the
-# writes k8s-operator asks a human about. No RBAC, nodes, namespaces or exec.
+# cluster-admin. Narrow it to the chart's read-only role: the usual resources,
+# never Secrets. It may change things only in the `playground` namespace
+# (deploy/agentgateway/45-k8s-operator.yaml), so an approved change can't
+# mount another namespace's Secrets or borrow a powerful service account.
 kagent-tools:
   rbac:
     readOnly: true
     allowSecrets: false
-    additionalRules:
-      - apiGroups: [""]
-        resources: [pods, services, configmaps, persistentvolumeclaims]
-        verbs: [create, update, patch, delete]
-      - apiGroups: ["apps"]
-        resources: [deployments, statefulsets, daemonsets, replicasets]
-        verbs: [create, update, patch, delete]
-      - apiGroups: ["apps"]
-        resources: [deployments/scale, statefulsets/scale, replicasets/scale]
-        verbs: [get, update, patch]
-      - apiGroups: ["batch"]
-        resources: [jobs, cronjobs]
-        verbs: [create, update, patch, delete]
-      - apiGroups: ["autoscaling"]
-        resources: [horizontalpodautoscalers]
-        verbs: [create, update, patch, delete]
+    additionalRules: []

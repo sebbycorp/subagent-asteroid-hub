@@ -75,13 +75,14 @@ for agentgateway `v2026.10.0` in the kind cluster and applies
 - **Tools:** each agent gets kagent's Kubernetes tools (MCP) through the
   gateway.
 - **Human in the loop:** `k8s-operator` reads the cluster freely, but every
-  change it wants to make (scale, rollout, patch, label, annotate, delete,
-  apply) waits for a person to approve or reject it, in the kagent UI or in
+  change it wants to make in `playground` (scale, rollout, patch, label,
+  annotate, delete, apply) waits for a person to approve or reject it, in the kagent UI or in
   the show (Y/X). It is suspended while it waits. It has no exec tool.
-- **No Secrets:** kagent's tool server ships as cluster-admin. `make
-  agentgateway` narrows it (`deploy/kagent-tools-rbac.yaml`): it reads the
-  usual resources, changes only ordinary workloads, and can't read Secrets,
-  touch RBAC or exec into pods, whatever an agent asks or a human approves.
+- **No Secrets, one sandbox:** kagent's tool server ships as cluster-admin.
+  `make agentgateway` narrows it to read-only with no Secrets
+  (`deploy/kagent-tools-rbac.yaml`, and the target fails if Secrets are still
+  readable). It can change things only in the `playground` namespace (no
+  Secrets, restricted Pod Security), so even an approved change can't escalate.
 - **Chats in:** the show's chats enter through a separate gateway listener
   (`:8081`) that routes only the A2A service, the session lookup and health
   checks. The sandboxes can't reach it, so agents can't use the gateway to

@@ -3,6 +3,75 @@
 # approval on a whole tool binding, so reads and writes are two bindings).
 # While it waits, Substrate suspends it: 0 CPU, worker freed.
 # Not granted at all: k8s_execute_command, k8s_create_resource_from_url.
+# kagent-tools can read the cluster (never Secrets) but change things only in
+# `playground`, which holds no Secrets and enforces the restricted Pod
+# Security standard: even an approved change can't escalate.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: playground
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kagent-tools-write
+  namespace: playground
+rules:
+  - apiGroups: [""]
+    resources: [pods, services, configmaps]
+    verbs: [create, update, patch, delete]
+  - apiGroups: ["apps"]
+    resources: [deployments, statefulsets, replicasets]
+    verbs: [create, update, patch, delete]
+  - apiGroups: ["apps"]
+    resources: [deployments/scale, statefulsets/scale, replicasets/scale]
+    verbs: [get, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kagent-tools-write
+  namespace: playground
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kagent-tools-write
+subjects:
+  - kind: ServiceAccount
+    name: kagent-tools
+    namespace: kagent
+---
+# something to operate on
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: playground
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: web}
+  template:
+    metadata:
+      labels: {app: web}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: web
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          ports: [{containerPort: 8080}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+---
 apiVersion: api.kagent.dev/v1alpha3
 kind: RemoteMCPServer
 metadata:
@@ -31,7 +100,9 @@ spec:
         name: default-model-config
       systemPrompt: |
         You are a careful Kubernetes operator. Use your read tools to look at the cluster.
-        When asked to change something, call the right write tool; a human approves or
+        You can only change things in the `playground` namespace; say so if asked to
+        change anything elsewhere. When asked to change something there, call the right
+        write tool; a human approves or
         rejects each change before it runs. If a change is rejected, say so and do not retry.
         Keep answers short.
       tools:

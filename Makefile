@@ -48,6 +48,9 @@ agentgateway: relay
 	  --set-string providers.openAI.apiKey=agentgateway-holds-the-real-key \
 	  --set providers.openAI.config.baseUrl=http://agentgateway-proxy.agentgateway-system.svc.cluster.local/qwen/v1 \
 	  --set providers.openAI.config.reasoningEffort=none --wait
+	# fail loudly if the tool server can still read Secrets
+	@if kubectl auth can-i get secrets -A --as=system:serviceaccount:kagent:kagent-tools >/dev/null; then \
+	  echo "kagent-tools can still read Secrets: check deploy/kagent-tools-rbac.yaml" >&2; exit 1; fi
 
 # Lets the cluster reach Ollama on this Mac without exposing it to the LAN.
 relay:

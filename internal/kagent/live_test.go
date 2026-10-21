@@ -166,7 +166,7 @@ func TestLiveOperatorApprovesOnlyChanges(t *testing.T) {
 		t.Fatalf("a read should answer without approval, got %+v", read)
 	}
 	t.Logf("read: %q", read.Reply)
-	write, err := c.Chat(ctx, id, "Scale the deployment kagent-tools in namespace kagent to 2 replicas.")
+	write, err := c.Chat(ctx, id, "Scale the deployment web in namespace playground to 2 replicas.")
 	if err != nil {
 		t.Fatal(err)
 	}
