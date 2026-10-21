@@ -101,14 +101,16 @@ func (b *Board) removeLocked(sessionID string) (Pending, bool) {
 	return Pending{}, false
 }
 
-// Decide answers a waiting turn (the oldest when sessionID is empty) in the
-// background; the agent resumes and finishes its turn.
-func (b *Board) Decide(ctx context.Context, sessionID string, approved bool) error {
+// Decide answers a waiting turn in the background; the agent resumes and
+// finishes its turn. The decision must name the exact turn (session and
+// task) the person was shown, so it can't land on a request they never saw.
+func (b *Board) Decide(ctx context.Context, sessionID, taskID string, approved bool) error {
 	b.mu.Lock()
-	if sessionID == "" && len(b.pending) > 0 {
-		sessionID = b.pending[0].SessionID
-	}
 	ap := b.approvs[sessionID]
+	if sessionID == "" || taskID == "" || ap == nil || ap.TaskID != taskID {
+		b.mu.Unlock()
+		return ErrNotPending
+	}
 	p, ok := b.removeLocked(sessionID)
 	d := b.d
 	b.mu.Unlock()

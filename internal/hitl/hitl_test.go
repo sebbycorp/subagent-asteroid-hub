@@ -60,7 +60,7 @@ func TestBoardDecideOldestAnswersAndClears(t *testing.T) {
 	}})
 	b.Add("s1", "ops", approval("t1"))
 	b.Add("s2", "ops", approval("t2"))
-	if err := b.Decide(context.Background(), "", true); err != nil {
+	if err := b.Decide(context.Background(), "s1", "t1", true); err != nil {
 		t.Fatal(err)
 	}
 	b.wg.Wait()
@@ -77,11 +77,24 @@ func TestBoardDecideOldestAnswersAndClears(t *testing.T) {
 
 func TestBoardDecideUnknownSession(t *testing.T) {
 	b := New(&fakeDecider{}, &marks{}, Options{})
-	if err := b.Decide(context.Background(), "nope", true); !errors.Is(err, ErrNotPending) {
+	if err := b.Decide(context.Background(), "nope", "t1", true); !errors.Is(err, ErrNotPending) {
 		t.Fatalf("err %v", err)
 	}
-	if err := b.Decide(context.Background(), "", false); !errors.Is(err, ErrNotPending) {
-		t.Fatalf("empty board: err %v", err)
+}
+
+// A decision must name the exact turn the person saw: no "approve whatever
+// is oldest", and no approving a newer request on the same session by mistake.
+func TestBoardDecisionMustNameTheTurn(t *testing.T) {
+	d := &fakeDecider{}
+	b := New(d, &marks{}, Options{})
+	b.Add("s1", "ops", approval("t1"))
+	for _, c := range [][2]string{{"", ""}, {"s1", ""}, {"", "t1"}, {"s1", "t-older"}} {
+		if err := b.Decide(context.Background(), c[0], c[1], true); !errors.Is(err, ErrNotPending) {
+			t.Fatalf("decision %v accepted: %v", c, err)
+		}
+	}
+	if len(b.List()) != 1 || len(d.calls) != 0 {
+		t.Fatalf("board changed by a bad decision: %+v %v", b.List(), d.calls)
 	}
 }
 
@@ -90,7 +103,7 @@ func TestBoardResumedTurnCanPauseAgain(t *testing.T) {
 	d := &fakeDecider{next: traffic.ChatResult{Approval: approval("t1b")}}
 	b := New(d, &marks{}, Options{})
 	b.Add("s1", "ops", approval("t1"))
-	b.Decide(context.Background(), "s1", true)
+	b.Decide(context.Background(), "s1", "t1", true)
 	b.wg.Wait()
 	if p := b.List(); len(p) != 1 || p[0].TaskID != "t1b" || p[0].Agent != "ops" {
 		t.Fatalf("pending %+v", p)
@@ -101,7 +114,7 @@ func TestBoardMarksTheResumedTurnForLatency(t *testing.T) {
 	m := &marks{}
 	b := New(&fakeDecider{}, m, Options{})
 	b.Add("s1", "ops", approval("t1"))
-	b.Decide(context.Background(), "s1", false)
+	b.Decide(context.Background(), "s1", "t1", false)
 	b.wg.Wait()
 	if m.sent != 1 || m.ended != 1 {
 		t.Fatalf("marks %+v", m)
@@ -112,10 +125,10 @@ func TestBoardDecideTwiceIsRefusedWhileDeciding(t *testing.T) {
 	d := &fakeDecider{gate: make(chan struct{})}
 	b := New(d, &marks{}, Options{})
 	b.Add("s1", "ops", approval("t1"))
-	if err := b.Decide(context.Background(), "s1", true); err != nil {
+	if err := b.Decide(context.Background(), "s1", "t1", true); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Decide(context.Background(), "s1", true); !errors.Is(err, ErrNotPending) {
+	if err := b.Decide(context.Background(), "s1", "t1", true); !errors.Is(err, ErrNotPending) {
 		t.Fatalf("second decision: %v", err)
 	}
 	close(d.gate)

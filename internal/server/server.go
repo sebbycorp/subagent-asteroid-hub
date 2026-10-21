@@ -38,7 +38,7 @@ type Tour interface {
 
 // Approvals answers turns paused for a person (human in the loop).
 type Approvals interface {
-	Decide(ctx context.Context, sessionID string, approved bool) error
+	Decide(ctx context.Context, sessionID, taskID string, approved bool) error
 }
 
 // ConnInfo describes a kagent environment.
@@ -202,17 +202,19 @@ func (s *server) tourAction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"ok": body.Action})
 }
 
-// approval answers a paused turn: {"sessionId": "" (oldest), "approved": true}.
+// approval answers the paused turn the person was shown:
+// {"sessionId": "...", "taskId": "...", "approved": true}.
 func (s *server) approval(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		SessionID string `json:"sessionId"`
+		TaskID    string `json:"taskId"`
 		Approved  bool   `json:"approved"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	if err := s.approve.Decide(context.WithoutCancel(r.Context()), body.SessionID, body.Approved); err != nil {
+	if err := s.approve.Decide(context.WithoutCancel(r.Context()), body.SessionID, body.TaskID, body.Approved); err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}

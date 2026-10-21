@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DELAY_MS, GAP_MS, newQueue, schedule, due, rockShape, aimAngle } from './show.mjs';
+import { DELAY_MS, GAP_MS, newQueue, schedule, due, aimAngle } from './show.mjs';
 
 test('schedule delays first event by DELAY_MS', () => {
   const q = newQueue();
@@ -34,30 +34,27 @@ test('schedule after a quiet spell is not penalised by an old gap', () => {
   assert.equal(schedule(q, { seq: 2 }, 60000), 60000 + DELAY_MS);
 });
 
-test('rockShape deterministic and bounded', () => {
-  const a = rockShape('cbcec519-0f94');
-  assert.deepEqual(a, rockShape('cbcec519-0f94'));
-  assert.notDeepEqual(a, rockShape('d6221e2d-aceb'));
-  for (const [x, y] of a) {
-    const r = Math.hypot(x, y);
-    assert.ok(r >= 6 && r <= 38, `radius ${r}`);
+test('scout ships come in four designs, each actor always the same one', async () => {
+  const { scoutKind, scoutOutline } = await import('./show.mjs');
+  const uids = Array.from({ length: 60 }, (_, i) => `uid-${i}-${i * 7919}`);
+  const kinds = new Set(uids.map(scoutKind));
+  assert.deepEqual([...kinds].sort(), ['crab', 'dart', 'orb', 'saucer']);
+  for (const u of uids.slice(0, 12)) {
+    assert.equal(scoutKind(u), scoutKind(u));
+    const pts = scoutOutline(scoutKind(u));
+    assert.ok(pts.length >= 4, `${scoutKind(u)} outline`);
+    for (const [x, y] of pts) assert.ok(Math.hypot(x, y) <= 20, `${scoutKind(u)} point ${x},${y} too far`);
   }
 });
 
-test('asteroids come in clearly different shapes', async () => {
-  const { rockShape, rockKind } = await import('./show.mjs');
-  const uids = Array.from({ length: 60 }, (_, i) => `uid-${i}-${i * 7919}`);
-  const kinds = new Set(uids.map(rockKind));
-  assert.ok(kinds.size >= 4, `only ${[...kinds]} shapes`);
-  const counts = new Set(uids.map((u) => rockShape(u).length));
-  assert.ok(counts.size >= 4, `point counts ${[...counts]}`);
-  const aspect = (pts) => {
-    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-    const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
-    return Math.max(w, h) / Math.min(w, h);
-  };
-  const long = uids.filter((u) => rockKind(u) === 'long').map((u) => aspect(rockShape(u)));
-  assert.ok(long.length && Math.min(...long) > 1.3, `long rocks aspect ${long}`);
+test('human-in-the-loop captions are never dropped from a burst', async () => {
+  const { newCaptions, pushCaption, currentCaption, CAPTION_MS } = await import('./show.mjs');
+  const cq = newCaptions();
+  pushCaption(cq, { kind: 'resume', caption: 'first' }, 0);
+  for (const k of ['running', 'hitl', 'running', 'resume', 'running', 'create']) pushCaption(cq, { kind: k, caption: k }, 0);
+  const shown = [];
+  for (let t = 0; t < 20 * CAPTION_MS; t += CAPTION_MS) shown.push(currentCaption(cq, t));
+  assert.ok(shown.includes('hitl'), `hitl caption dropped: ${shown}`);
 });
 
 test('aimAngle points at target', () => {

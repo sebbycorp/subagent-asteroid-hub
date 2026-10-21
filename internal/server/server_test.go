@@ -307,8 +307,8 @@ type fakeApprovals struct {
 	err   error
 }
 
-func (f *fakeApprovals) Decide(_ context.Context, id string, approved bool) error {
-	f.calls = append(f.calls, fmt.Sprintf("%s:%v", id, approved))
+func (f *fakeApprovals) Decide(_ context.Context, id, task string, approved bool) error {
+	f.calls = append(f.calls, fmt.Sprintf("%s/%s:%v", id, task, approved))
 	return f.err
 }
 
@@ -317,15 +317,15 @@ func TestServerApproval(t *testing.T) {
 	h := hub.New(emptySource{}, "env")
 	srv := httptest.NewServer(New(h, &fakeWaves{}, &fakeTour{}, func(ConnInfo) error { return nil }, fstest.MapFS{}, ConnInfo{}, ap))
 	defer srv.Close()
-	if resp, body := post(t, srv.URL+"/api/approval", `{"approved":true}`); resp.StatusCode != 200 {
+	if resp, body := post(t, srv.URL+"/api/approval", `{"sessionId":"s1","taskId":"t1","approved":true}`); resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, body)
 	}
-	post(t, srv.URL+"/api/approval", `{"sessionId":"s2","approved":false}`)
-	if fmt.Sprint(ap.calls) != "[:true s2:false]" {
+	post(t, srv.URL+"/api/approval", `{"sessionId":"s2","taskId":"t2","approved":false}`)
+	if fmt.Sprint(ap.calls) != "[s1/t1:true s2/t2:false]" {
 		t.Fatalf("calls %v", ap.calls)
 	}
 	ap.err = errors.New("no turn is waiting for that decision")
-	if resp, _ := post(t, srv.URL+"/api/approval", `{"approved":true}`); resp.StatusCode != 409 {
+	if resp, _ := post(t, srv.URL+"/api/approval", `{"sessionId":"s1","taskId":"t1","approved":true}`); resp.StatusCode != 409 {
 		t.Fatalf("nothing pending: %d", resp.StatusCode)
 	}
 }

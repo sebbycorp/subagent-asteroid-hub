@@ -53,40 +53,27 @@ function seeded(str) {
   };
 }
 
-const ROCK_KINDS = ['jagged', 'long', 'chunky', 'crater'];
+const SCOUT_KINDS = ['saucer', 'dart', 'crab', 'orb'];
 
-// rockKind picks one of a few asteroid families for an actor, always the same.
-export function rockKind(uid) {
-  return ROCK_KINDS[Math.floor(seeded(`kind:${uid}`)() * ROCK_KINDS.length)];
+// scoutKind picks the alien scout design for an actor, always the same one,
+// so a resumed ship is recognisably the ship that froze.
+export function scoutKind(uid) {
+  return SCOUT_KINDS[Math.floor(seeded(`kind:${uid}`)() * SCOUT_KINDS.length)];
 }
 
-// rockShape is an asteroid outline, the same for the same actor every time
-// (so a resumed rock is recognisably the same one), drawn from its family:
-//   jagged  deep notches in random places
-//   long    stretched, potato-like
-//   chunky  few big flat faces
-//   crater  a bite taken out of one side
-export function rockShape(uid) {
-  const rand = seeded(uid);
-  const kind = rockKind(uid);
-  const counts = { jagged: [10, 3], long: [9, 3], chunky: [6, 2], crater: [9, 2] };
-  const [base, spread] = counts[kind];
-  const n = base + Math.floor(rand() * spread);
-  const R = kind === 'long' ? 18 + rand() * 8 : 18 + rand() * 10;
-  const bite = Math.floor(rand() * n);
-  const pts = [];
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2 + (rand() - 0.5) * (1.8 / n);
-    let r;
-    if (kind === 'jagged') r = R * (rand() < 0.4 ? 0.52 + 0.16 * rand() : 0.85 + 0.15 * rand());
-    else if (kind === 'chunky') r = R * (0.7 + 0.3 * rand());
-    else if (kind === 'crater') r = R * (i === bite || i === (bite + 1) % n ? 0.45 + 0.1 * rand() : 0.85 + 0.15 * rand());
-    else r = R * (0.72 + 0.28 * rand());
-    let x = Math.cos(a) * r, y = Math.sin(a) * r;
-    if (kind === 'long') { x *= 1.45; y *= 0.75; }
-    pts.push([x, y]);
+// scoutOutline is the hull of a scout design, facing +x: what breaks apart
+// when Substrate freezes it.
+export function scoutOutline(kind) {
+  const ring = (rx, ry, n) => Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * Math.PI * 2;
+    return [Math.cos(a) * rx, Math.sin(a) * ry];
+  });
+  switch (kind) {
+    case 'saucer': return ring(16, 7, 12);
+    case 'dart': return [[17, 0], [-6, -8], [-11, -12], [-8, 0], [-11, 12], [-6, 8]];
+    case 'crab': return [[10, -8], [10, -3], [14, -3], [14, 3], [10, 3], [10, 8], [-4, 8], [-4, 12], [-10, 12], [-10, -12], [-4, -12], [-4, -8]];
+    default: return ring(10, 10, 10); // orb
   }
-  return pts;
 }
 
 export function aimAngle(ship, target) {
@@ -125,7 +112,7 @@ export function settled(seen, uid, mismatch, nowMs) {
 // Captions get their own queue: each stays up at least CAPTION_MS so it can
 // be read, even when animations run faster. If a burst backs up more than
 // MAX_WAITING, "running" captions go first (the rock's label already says
-// it), then creates/resumes; suspend captions — the point of the show — stay.
+// it), then creates/resumes; suspend and human-in-the-loop captions stay.
 export const CAPTION_MS = 2400;
 export const MAX_WAITING = 3;
 
@@ -142,7 +129,7 @@ export function pushCaption(cq, ev, nowMs) {
   cq.waiting.push(ev);
   while (cq.waiting.length > MAX_WAITING) {
     let i = cq.waiting.findIndex((e) => e.kind === 'running');
-    if (i < 0) i = cq.waiting.findIndex((e) => e.kind !== 'suspend');
+    if (i < 0) i = cq.waiting.findIndex((e) => e.kind !== 'suspend' && e.kind !== 'hitl');
     cq.waiting.splice(i < 0 ? 0 : i, 1);
   }
 }
