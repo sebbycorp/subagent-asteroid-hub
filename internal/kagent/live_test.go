@@ -100,3 +100,50 @@ func TestLiveCheckpointFork(t *testing.T) {
 		t.Fatalf("fork forgot: %+v", ans)
 	}
 }
+
+func TestLiveHumanApproval(t *testing.T) {
+	ctx := context.Background()
+	c := liveClient(t)
+	id, err := c.CreateSession(ctx, traffic.AgentRef{Namespace: "kagent", Name: "asteroids-demo-ops"}, fmt.Sprintf("asteroids-it-%d", time.Now().Unix()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.DeleteSession(ctx, id) })
+	res, err := c.Chat(ctx, id, "How many pods are running in the kagent namespace?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Approval == nil || len(res.Approval.Tools) == 0 || res.Approval.TaskID == "" {
+		t.Fatalf("expected a pending tool approval, got %+v", res)
+	}
+	t.Logf("waiting on a human for %s %v", res.Approval.Tools[0].Name, res.Approval.Tools[0].Args)
+	// the actor is suspended while it waits
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		s, err := c.Snapshot(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var st model.ActorState
+		for _, a := range s.Actors {
+			if a.SessionID == id {
+				st = a.State
+			}
+		}
+		if st == model.StateSuspended {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("actor not suspended while waiting (state %q)", st)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	done, err := c.Decide(ctx, id, res.Approval, true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Approval != nil || !strings.ContainsAny(done.Reply, "0123456789") {
+		t.Fatalf("after approval: %+v", done)
+	}
+	t.Logf("answer after approval: %q", done.Reply)
+}

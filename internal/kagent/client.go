@@ -6,11 +6,16 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	a2atype "github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2aclient"
+	a2agrpc "github.com/a2aproject/a2a-go/v2/a2agrpc/v1"
+	a2apb "github.com/a2aproject/a2a-go/v2/a2apb/v1"
 	"github.com/google/uuid"
+	kagenta2a "github.com/kagent-dev/kagent/go/api/a2a"
 	"github.com/kagent-dev/kagent/go/api/client"
 	apiv1 "github.com/kagent-dev/kagent/go/api/gen/kagent/api/v1"
 	"google.golang.org/grpc"
@@ -40,7 +45,8 @@ const slowEvery = 2 * time.Second
 type Client struct {
 	opts     Options
 	api      *client.APIClientSet
-	gw       *client.GatewayClientSet
+	gw       *client.APIClientSet // a connection to the A2A gateway
+	a2a      a2aclient.Transport
 	system   apiv1.SystemServiceClient
 	sessions apiv1.SessionServiceClient
 	agents   apiv1.AgentServiceClient
@@ -85,7 +91,7 @@ func Dial(o Options) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("kagent api %s: %w", o.API, err)
 	}
-	gw, err := client.NewGateway(o.Gateway, copts...)
+	gw, err := client.NewAPI(o.Gateway, copts...)
 	if err != nil {
 		api.Close()
 		return nil, fmt.Errorf("kagent gateway %s: %w", o.Gateway, err)
@@ -96,8 +102,15 @@ func Dial(o Options) (*Client, error) {
 		gw.Close()
 		return nil, err
 	}
+	gwConn, err := gw.Conn()
+	if err != nil {
+		api.Close()
+		gw.Close()
+		return nil, err
+	}
 	return &Client{
 		opts: o, api: api, gw: gw,
+		a2a:      a2agrpc.NewGRPCTransportFromClient(a2apb.NewA2AServiceClient(gwConn)),
 		system:   apiv1.NewSystemServiceClient(conn),
 		sessions: apiv1.NewSessionServiceClient(conn),
 		agents:   apiv1.NewAgentServiceClient(conn),
@@ -307,23 +320,65 @@ func (c *Client) DeleteSession(ctx context.Context, id string) error {
 // Chat sends one message to a session over A2A and returns when the reply
 // stream ends (the agent's turn is over), with the reply text and task ID.
 func (c *Client) Chat(ctx context.Context, sessionID, text string) (traffic.ChatResult, error) {
-	cctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
-	defer cancel()
-	a2a, err := c.gw.A2A.ForSession(cctx, sessionID)
-	if err != nil {
-		return traffic.ChatResult{}, sessionErr("a2a client", err)
+	return c.send(ctx, sessionID, a2atype.NewMessage(a2atype.MessageRoleUser, a2atype.NewTextPart(text)))
+}
+
+// Decide answers a paused turn's tool approval and returns the resumed turn.
+func (c *Client) Decide(ctx context.Context, sessionID string, ap *traffic.Approval, approved bool, reason string) (traffic.ChatResult, error) {
+	text := "Approved"
+	if !approved {
+		text = "Denied"
 	}
 	msg := a2atype.NewMessage(a2atype.MessageRoleUser, a2atype.NewTextPart(text))
+	msg.TaskID, msg.ContextID = a2atype.TaskID(ap.TaskID), sessionID
+	resp := kagenta2a.ToolApprovalResponse{Type: kagenta2a.HITLTypeToolApprovalResponse}
+	for _, t := range ap.Tools {
+		d := kagenta2a.ToolApproval{ID: t.ID, Approved: approved}
+		if !approved {
+			d.RejectionReason = reason
+		}
+		resp.Approvals = append(resp.Approvals, d)
+	}
+	if err := kagenta2a.AttachHITL(msg, resp); err != nil {
+		return traffic.ChatResult{}, err
+	}
+	return c.send(ctx, sessionID, msg)
+}
+
+// send streams one message to a session, declaring kagent's human-in-the-loop
+// extension so a turn can pause for approval (and be answered).
+func (c *Client) send(ctx context.Context, sessionID string, msg *a2atype.Message) (traffic.ChatResult, error) {
+	cctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	// A2A routes by tenant (the agent) and continues the session by context.
+	sess, err := c.sessions.GetSession(cctx, &apiv1.GetSessionRequest{SessionId: sessionID})
+	if err != nil {
+		return traffic.ChatResult{}, sessionErr("a2a session", err)
+	}
+	agent := sess.GetSession().GetAgent()
+	if msg.ContextID == "" {
+		msg.ContextID = sessionID
+	}
+	// Service params become the request's gRPC metadata (the transport
+	// replaces any set on the context), so the HITL extension goes here.
+	params := a2aclient.ServiceParams{strings.ToLower(a2atype.SvcParamExtensions): {kagenta2a.HITLExtensionURI}}
+	if c.opts.UserID != "" {
+		params["x-user-id"] = []string{c.opts.UserID}
+	}
 	var rc replyCollector
-	for ev, err := range a2a.SendStreamingMessage(cctx, &a2atype.SendMessageRequest{Message: msg}) {
+	result := func() traffic.ChatResult {
+		return traffic.ChatResult{Reply: rc.text(), TaskID: rc.taskID, Approval: rc.approval()}
+	}
+	req := &a2atype.SendMessageRequest{Tenant: agent.GetNamespace() + "/" + agent.GetName(), Message: msg}
+	for ev, err := range c.a2a.SendStreamingMessage(cctx, params, req) {
 		if err != nil {
-			return traffic.ChatResult{Reply: rc.text(), TaskID: rc.taskID}, sessionErr("a2a stream", err)
+			return result(), sessionErr("a2a stream", err)
 		}
 		if ev != nil {
 			rc.apply(ev)
 		}
 	}
-	return traffic.ChatResult{Reply: rc.text(), TaskID: rc.taskID}, nil
+	return result(), nil
 }
 
 // Checkpoint saves a named point in a session's history (at the given turn)

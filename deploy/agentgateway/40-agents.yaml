@@ -143,3 +143,40 @@ spec:
               kind: RemoteMCPServer
               name: agw-tools-asteroids-demo-poet
             tools: [k8s_get_resources, k8s_get_events]
+---
+# Human in the loop: ops must get a human's approval before any tool call.
+# While it waits, Substrate suspends it (0 CPU, worker freed).
+apiVersion: api.kagent.dev/v1alpha3
+kind: RemoteMCPServer
+metadata:
+  name: agw-tools-asteroids-demo-ops
+  namespace: kagent
+spec:
+  description: kagent Kubernetes tools, via agentgateway
+  protocol: STREAMABLE_HTTP
+  url: http://agentgateway-proxy.agentgateway-system.svc.cluster.local/mcp/kagent-tools
+  headersFrom:
+    - name: x-asteroids-agent
+      value: asteroids-demo-ops
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: Agent
+metadata:
+  name: asteroids-demo-ops
+  namespace: kagent
+spec:
+  harnessRef:
+    name: kagent-default
+  template:
+    inline:
+      description: Substrate Asteroids demo agent that needs human approval for tools
+      modelConfig:
+        name: default-model-config
+      systemPrompt: "You are Ops. To answer questions about the cluster, call your Kubernetes tools; a human approves each call. Answer in one short sentence."
+      tools:
+        - mcp:
+            server:
+              kind: RemoteMCPServer
+              name: agw-tools-asteroids-demo-ops
+            tools: [k8s_get_resources, k8s_get_events]
+            requireApproval: true
