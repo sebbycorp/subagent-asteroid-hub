@@ -13,10 +13,17 @@ test:
 image:
 	docker build -t $(IMAGE) .
 
-# The kagent API (8083), agentgateway's sandbox listener (8090) and its chat
-# ingress listener (8091), reachable from the container via host.docker.internal.
+# The kagent API (8083) and UI (8082), agentgateway's sandbox listener (8090)
+# and its chat ingress listener (8091); the container reaches them via
+# host.docker.internal.
+# With LAN_IP set, the kagent UI (8082) and API (8083) are published on it too:
+# anyone on that network can then drive kagent (it has no login here).
+PF_ADDR = 127.0.0.1$(if $(LAN_IP),$(comma)$(LAN_IP))
+comma := ,
+
 pf:
-	kubectl port-forward -n kagent svc/kagent-controller 8083:8083 & \
+	kubectl port-forward --address $(PF_ADDR) -n kagent svc/kagent-controller 8083:8083 & \
+	kubectl port-forward --address $(PF_ADDR) -n kagent svc/kagent-ui 8082:8080 & \
 	kubectl port-forward -n agentgateway-system svc/agentgateway-proxy 8090:80 8091:8081 & \
 	wait
 
