@@ -78,9 +78,10 @@ for agentgateway `v2026.10.0` in the kind cluster and applies
   change it wants to make (scale, rollout, patch, label, annotate, delete,
   apply) waits for a person to approve or reject it, in the kagent UI or in
   the show (Y/X). It is suspended while it waits. It has no exec tool.
-- **No Secrets:** kagent's tool server can read every Secret, so the gateway
-  refuses any tool call that names one (`35-mcp-no-secrets.yaml`), for every
-  agent, approved or not.
+- **No Secrets:** kagent's tool server ships as cluster-admin. `make
+  agentgateway` narrows it (`deploy/kagent-tools-rbac.yaml`): it reads the
+  usual resources, changes only ordinary workloads, and can't read Secrets,
+  touch RBAC or exec into pods, whatever an agent asks or a human approves.
 - **Chats in:** the show's chats enter through a separate gateway listener
   (`:8081`) that routes only the A2A service, the session lookup and health
   checks. The sandboxes can't reach it, so agents can't use the gateway to
