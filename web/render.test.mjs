@@ -27,3 +27,17 @@ test('the agentgateway planet floats, inside one shield, within the field', asyn
   assert.equal(Math.round(e.x), 400 + SHIELD_R);
   assert.equal(FIELD.x0, 20);
 });
+
+test('the kagent ship glides side to side along the top, staying in the field', async () => {
+  const { saucerSpots, FIELD, SAUCER_SCALE } = await import('./render.mjs');
+  assert.ok(SAUCER_SCALE >= 1.4, 'bigger ship');
+  const pools = [{ name: 'kagent-default', workers: ['a', 'b', 'c'] }];
+  const xs = [];
+  for (let t = 0; t < 120000; t += 500) {
+    const [s] = saucerSpots(pools, t);
+    xs.push(s.x);
+    assert.ok(s.x - 70 * SAUCER_SCALE >= FIELD.x0 && s.x + 70 * SAUCER_SCALE <= FIELD.x1, `x ${s.x}`);
+    assert.ok(s.y < FIELD.y0, 'stays on top');
+  }
+  assert.ok(Math.max(...xs) - Math.min(...xs) > 300, 'moves side to side');
+});

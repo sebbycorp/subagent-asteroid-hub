@@ -78,70 +78,86 @@ export function poly(ctx, pts, x, y, rot = 0, scale = 1) {
   ctx.closePath();
 }
 
-export function saucerSpots(pools) {
+// The kagent worker-pool ship is drawn this much bigger than its base size.
+export const SAUCER_SCALE = 1.5;
+
+// saucerSpots places each worker pool's ship along the top; each glides side
+// to side over time.
+export function saucerSpots(pools, t = 0) {
   const n = Math.max(pools.length, 1);
   const span = FIELD.x1 - FIELD.x0;
-  return pools.map((p, i) => ({ pool: p, x: FIELD.x0 + (span * (i + 1)) / (n + 1), y: 88 }));
+  const half = 70 * SAUCER_SCALE;
+  const amp = Math.max(0, Math.min(330, span / (2 * n) - half - 4));
+  return pools.map((p, i) => ({
+    pool: p,
+    x: FIELD.x0 + (span * (i + 1)) / (n + 1) + amp * Math.sin((t / 1000) * 0.12 + i * 1.7),
+    y: 96,
+  }));
 }
 
-// drawSaucer draws a worker pool as a domed mothership: chasing rim lights,
-// one porthole per worker (lit while hosting an actor), and a tractor beam
-// when it launches an asteroid.
+// The kagent mark, drawn in the worker-pool ship's dome.
+const KAGENT = typeof Image === 'undefined' ? {} : Object.assign(new Image(), { src: 'kagent-mark.png' });
+
+// drawSaucer draws a worker pool as kagent's domed mothership: the kagent
+// robot in the dome, chasing rim lights, one porthole per worker (lit while
+// hosting an actor), and a tractor beam when it launches an asteroid.
 function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
   const { x, y } = s;
+  const S = SAUCER_SCALE;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(S, S);
   // tractor beam
   const bk = (now - (beamAt ?? -1e9)) / 800;
   if (bk >= 0 && bk < 1) {
     const prev = ctx.globalAlpha;
     ctx.globalAlpha = prev * (1 - bk) * 0.7;
     ctx.beginPath();
-    ctx.moveTo(x - 16, y + 20); ctx.lineTo(x - 44, y + 96);
-    ctx.moveTo(x + 16, y + 20); ctx.lineTo(x + 44, y + 96);
+    ctx.moveTo(-16, 20); ctx.lineTo(-44, 70);
+    ctx.moveTo(16, 20); ctx.lineTo(44, 70);
     for (let i = 1; i <= 5; i++) {
-      const t = ((i / 5 + bk * 2) % 1), yy = y + 20 + t * 76, w = 16 + t * 28;
-      ctx.moveTo(x - w, yy); ctx.lineTo(x + w, yy);
+      const t = ((i / 5 + bk * 2) % 1), yy = 20 + t * 50, w = 16 + t * 28;
+      ctx.moveTo(-w, yy); ctx.lineTo(w, yy);
     }
-    stroke(ctx, NEW, 1);
+    stroke(ctx, NEW, 1 / S);
     ctx.globalAlpha = prev;
   }
-  // dome with a glint
+  // dome with the kagent robot inside
   ctx.beginPath();
-  ctx.ellipse(x, y - 9, 20, 17, 0, Math.PI, 0);
-  stroke(ctx, INK, 1.4);
-  ctx.beginPath();
-  ctx.ellipse(x - 6, y - 15, 8, 6, -0.5, Math.PI * 1.05, Math.PI * 1.55);
-  stroke(ctx, DIM, 1);
+  ctx.ellipse(0, -9, 22, 19, 0, Math.PI, 0);
+  stroke(ctx, INK, 1.4 / S);
+  if (KAGENT.complete && KAGENT.naturalWidth) ctx.drawImage(KAGENT, -11, -27, 22, 22);
   // upper body, rim, skirt
   ctx.beginPath();
-  ctx.ellipse(x, y - 4, 42, 9, 0, Math.PI, 0);
-  stroke(ctx, INK, 1.4);
+  ctx.ellipse(0, -4, 44, 9, 0, Math.PI, 0);
+  stroke(ctx, INK, 1.4 / S);
   ctx.beginPath();
-  ctx.ellipse(x, y, 66, 11, 0, 0, Math.PI * 2);
-  stroke(ctx, INK, 1.6);
+  ctx.ellipse(0, 0, 68, 11, 0, 0, Math.PI * 2);
+  stroke(ctx, INK, 1.6 / S);
   ctx.beginPath();
-  ctx.moveTo(x - 48, y + 8); ctx.lineTo(x - 30, y + 19); ctx.lineTo(x + 30, y + 19); ctx.lineTo(x + 48, y + 8);
-  stroke(ctx, INK, 1.4);
+  ctx.moveTo(-48, 8); ctx.lineTo(-30, 19); ctx.lineTo(30, 19); ctx.lineTo(48, 8);
+  stroke(ctx, INK, 1.4 / S);
   // chasing rim lights (front half bright)
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2 + now / 900;
-    const lx = x + Math.cos(a) * 56, ly = y + Math.sin(a) * 6;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2 + now / 900;
     ctx.beginPath();
-    ctx.arc(lx, ly, Math.sin(a) > 0 ? 1.6 : 1, 0, Math.PI * 2);
+    ctx.arc(Math.cos(a) * 58, Math.sin(a) * 6, Math.sin(a) > 0 ? 1.4 : 0.9, 0, Math.PI * 2);
     ctx.fillStyle = Math.sin(a) > 0 ? INK : DIM;
     ctx.fill();
   }
   // portholes: one per worker
   const workers = s.pool.workers || [];
-  const gap = 15;
+  const gap = 13;
   workers.forEach((w, i) => {
-    const px = x - ((workers.length - 1) * gap) / 2 + i * gap;
+    const px = -((workers.length - 1) * gap) / 2 + i * gap;
     ctx.beginPath();
-    ctx.arc(px, y + 13.5, 3.6, 0, Math.PI * 2);
+    ctx.arc(px, 13.5, 3.4, 0, Math.PI * 2);
     if (busyWorkers.has(w)) { ctx.fillStyle = INK; ctx.fill(); }
-    stroke(ctx, INK, 1);
+    stroke(ctx, INK, 1 / S);
   });
-  text(ctx, s.pool.name, x, y - 34, { size: 11, align: 'center', spacing: 2 });
-  text(ctx, `WORKER POOL · ${workers.length} WORKER${workers.length === 1 ? '' : 'S'}`, x, y + 34, { size: 8, align: 'center', color: DIM, spacing: 1 });
+  ctx.restore();
+  text(ctx, s.pool.name, x, y + 42, { size: 10, align: 'center', spacing: 2 });
+  text(ctx, `KAGENT WORKER POOL · ${workers.length} WORKER${workers.length === 1 ? '' : 'S'}`, x, y + 54, { size: 7, align: 'center', color: DIM, spacing: 1 });
 }
 
 function drawRock(ctx, r) {
@@ -267,7 +283,7 @@ export function draw(ctx, world, now) {
   const busy = new Set();
   for (const r of world.rocks.values()) if (r.worker && !r.dying) busy.add(r.worker);
   drawTopBar(ctx, st, busy.size, world.rocks.size, world.vault.size);
-  for (const s of saucerSpots(st.snapshot?.pools || [])) drawSaucer(ctx, s, busy, now, world.beamAt?.[s.pool.name]);
+  for (const s of saucerSpots(st.snapshot?.pools || [], now)) drawSaucer(ctx, s, busy, now, world.beamAt?.[s.pool.name]);
   drawVault(ctx, world.vault.size);
   drawLog(ctx, world.log || []);
   drawGatewayPlanet(ctx, world, now);
@@ -412,10 +428,10 @@ function drawLegend(ctx) {
   }
 }
 
-function hexagon(ctx, x, y, r) {
+function hexagon(ctx, x, y, r, rot = 0) {
   ctx.beginPath();
   for (let i = 0; i < 6; i++) {
-    const a = Math.PI / 6 + (i * Math.PI) / 3;
+    const a = Math.PI / 6 + (i * Math.PI) / 3 + rot;
     const X = x + Math.cos(a) * r, Y = y + Math.sin(a) * r;
     i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y);
   }
@@ -437,10 +453,10 @@ function drawGatewayPlanet(ctx, world, now) {
   // the one shield
   ctx.save();
   ctx.globalAlpha *= 0.55 + flare * 0.45;
-  hexagon(ctx, x, y, SHIELD_R + flare * 5);
+  hexagon(ctx, x, y, SHIELD_R + flare * 5, now / 5000); // the shield turns…
   stroke(ctx, GW, 1.4 + flare * 1.6);
   ctx.globalAlpha *= 0.5;
-  hexagon(ctx, x, y, SHIELD_R - 6);
+  hexagon(ctx, x, y, SHIELD_R - 6, -now / 3500); // …its inner layer the other way
   stroke(ctx, GW, 1);
   ctx.restore();
   // the planet: body, faint bands, a tilted ring, the agentgateway mark inside
@@ -452,9 +468,19 @@ function drawGatewayPlanet(ctx, world, now) {
     ctx.ellipse(x, y + dy, rx, 5, 0, 0, Math.PI);
     stroke(ctx, DIM, 1);
   }
+  // the ring slowly precesses, with a moon riding it
+  const tilt = -0.32 + 0.12 * Math.sin(now / 4000);
   ctx.beginPath();
-  ctx.ellipse(x, y, PLANET_R * 1.5, PLANET_R * 0.3, -0.32, 0.12 * Math.PI, 0.88 * Math.PI, true);
+  ctx.ellipse(x, y, PLANET_R * 1.5, PLANET_R * 0.3, tilt, 0.12 * Math.PI, 0.88 * Math.PI, true);
   stroke(ctx, INK, 1.4);
+  const ma = now / 1600;
+  const mx = Math.cos(ma) * PLANET_R * 1.5, my = Math.sin(ma) * PLANET_R * 0.3;
+  const behind = Math.sin(ma) < 0 && Math.abs(mx) < PLANET_R;
+  if (!behind) {
+    ctx.beginPath();
+    ctx.arc(x + mx * Math.cos(tilt) - my * Math.sin(tilt), y + mx * Math.sin(tilt) + my * Math.cos(tilt), 4, 0, Math.PI * 2);
+    stroke(ctx, INK, 1.2);
+  }
   if (LOGO.complete && LOGO.naturalWidth) {
     const size = PLANET_R * 1.3; // small mark at the planet's core
     ctx.drawImage(LOGO, x - size / 2, y - size / 2, size, size);

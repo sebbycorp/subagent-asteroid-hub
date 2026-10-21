@@ -48,7 +48,7 @@ const pools = () => world.state?.snapshot?.pools || [];
 const actors = () => world.state?.snapshot?.actors || {};
 
 function saucerFor(pool) {
-  const spots = saucerSpots(pools());
+  const spots = saucerSpots(pools(), performance.now());
   return spots.find((s) => s.pool.name === pool) || spots[0] || { x: 500, y: 88 };
 }
 
