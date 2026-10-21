@@ -19,13 +19,25 @@ export function gatewayPos(t, tourOpen) {
   return { x: cx + ax * Math.sin(a), y: 362 + 118 * Math.cos(a) };
 }
 
-// The planet drifts on one slow loop through the field.
+// The planet and the rocket share one slow orbit, on opposite sides of it:
+// when one swings right the other swings left, when one is high the other is
+// low, so they never come near each other.
 function orbitPhase(t) {
   return (t / 1000) * 0.05;
 }
 
+// fighterPos is where the rocket patrols: opposite the agentgateway planet
+// (and, while the tour card is open, mirrored within the field beside it).
+export function fighterPos(t, tourOpen) {
+  const a = orbitPhase(t);
+  const y = 400 - 110 * Math.cos(a);
+  if (tourOpen) return { x: 1370 - gatewayPos(t, true).x, y }; // mirrored within the planet's tour lane
+  return { x: 505 - 300 * Math.sin(a), y };
+}
+
 // GUNNER is where the kagent robot and its rail cannon sit: the bottom-left
-// corner of the field, which the planet's loop never comes near.
+// corner of the field, which the planet's loop and the rocket's patrol never
+// come near.
 export const GUNNER = { x: 105, y: 545 };
 export const GUNNER_SCALE = 1.6; // a big cannon
 
@@ -338,6 +350,23 @@ export function drawGunner(ctx, ship, now, pools = [], busy = new Set()) {
   }
 }
 
+// drawShip draws the rocket that shoots down each suspending asteroid: the
+// classic vector rocket with a flickering engine flame.
+export function drawShip(ctx, ship) {
+  const pts = [[16, 0], [-11, -9], [-6, 0], [-11, 9]];
+  poly(ctx, pts, ship.x, ship.y, ship.a);
+  stroke(ctx);
+  const f = 7 + Math.random() * 7;
+  poly(ctx, [[-7, -3.5], [-7 - f, 0], [-7, 3.5]], ship.x, ship.y, ship.a);
+  stroke(ctx, RESUMED, 1);
+  if (ship.flash > 0) {
+    ctx.beginPath();
+    ctx.moveTo(ship.x + Math.cos(ship.a) * 16, ship.y + Math.sin(ship.a) * 16);
+    ctx.lineTo(ship.x + Math.cos(ship.a) * 26, ship.y + Math.sin(ship.a) * 26);
+    stroke(ctx, INK, 1);
+  }
+}
+
 export function vaultSlot(i) {
   const col = i % 10, row = Math.floor(i / 10);
   return { x: VAULT.x + 18 + col * 22, y: VAULT.y + 64 + row * 16 };
@@ -442,6 +471,12 @@ export function draw(ctx, world, now) {
     stroke(ctx);
   }
   ctx.globalAlpha = dim ? 0.35 : 1;
+  for (const b of world.bullets) {
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 1.8, 0, Math.PI * 2);
+    ctx.fillStyle = INK;
+    ctx.fill();
+  }
   for (const c of world.capsules) capsule(ctx, c.x, c.y);
   for (const f of world.flashes) {
     const k = (now - f.born) / 600;
@@ -452,7 +487,8 @@ export function draw(ctx, world, now) {
     ctx.globalAlpha = dim ? 0.35 : 1;
   }
   drawFocus(ctx, world, now);
-  drawGunner(ctx, world.ship, now, st.snapshot?.pools || [], busy);
+  drawGunner(ctx, world.cannon, now, st.snapshot?.pools || [], busy);
+  drawShip(ctx, world.rocket);
   drawCaption(ctx, world.captionLines, st.waves?.note, world.help);
   ctx.globalAlpha = 1;
 

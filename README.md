@@ -21,16 +21,16 @@ store the instant each turn ends.*
 | Asteroid fired out of the cannon | an actor being **created** (a new session gets a fresh gVisor sandbox); four rock families (jagged, long, chunky, cratered), each session always the same shape |
 | Capsule flying from the store into the cannon, then the same asteroid fired out again | a **resume**: the actor's snapshot is restored onto a worker |
 | Asteroid tumbling and growing, labelled `RUNNING ON WORKER …` | an actor **running** a turn (it grows while its sandbox works) |
-| The asteroid cracks apart by itself and a capsule drops into the store | a **suspend**: memory and disk are checkpointed to S3 and the worker is freed |
+| The rocket shoots the asteroid down, it breaks up, a capsule drops into the store | a **suspend**: memory and disk are checkpointed to S3 and the worker is freed |
 | Grey, dashed, frozen asteroid with the kagent robot pilot holding up a sign | **human in the loop**: the agent asked to run a tool and is suspended (0 CPU) until someone presses `Y` or `X` |
 | Snapshot store | every suspended actor, stored at 0 CPU and 0 memory, with a live log underneath |
 | Cyan rock / amber rock | a **new** session (cloned from the agent's golden snapshot) / a **resumed** one (restored from its own snapshot, generation shown) |
 | Planet with the agentgateway mark, inside a hexagon shield | **agentgateway**, the one gate every model call, MCP tool call and chat in passes through; the models kagent uses are listed under it |
 | Dotted shield on a rock + a beam to the planet | a real request agentgateway handled for that agent: a model call, a tool call, or a chat coming in |
 
-Nothing shoots the asteroid. Substrate suspends an actor by itself, the
+The rocket doesn't cause the suspend. Substrate suspends an actor by itself, the
 moment its turn ends. On a local kind cluster that's within a few milliseconds
-of the reply finishing, and the captions say so.
+of the reply finishing, and the captions say so. The rocket just marks the moment.
 
 The top bar shows live numbers: busy workers, running and stored actors, the
 last restore time (chat sent → actor running), the last time-to-suspend, and

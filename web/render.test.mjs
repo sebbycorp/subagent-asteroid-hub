@@ -101,3 +101,22 @@ test('the moon hides when it passes behind the planet', async () => {
     if (Math.sin(a) < 0 && Math.hypot(m.x - c.x, m.y - c.y) < PLANET_R + 4) assert.equal(m.visible, false, `peeks through at ${a}`);
   }
 });
+
+test('the fighter flies opposite the agentgateway planet and never comes close', async () => {
+  const { gatewayPos, fighterPos, GUNNER, SHIELD_R, CARD, FIELD } = await import('./render.mjs');
+  let minD = Infinity;
+  for (let t = 0; t < 900000; t += 250) {
+    for (const tour of [false, true]) {
+      const g = gatewayPos(t, tour), f = fighterPos(t, tour);
+      minD = Math.min(minD, Math.hypot(g.x - f.x, g.y - f.y));
+      assert.ok(Math.hypot(f.x - GUNNER.x, f.y - GUNNER.y) >= 120, `rocket too close to the cannon at ${f.x},${f.y}`);
+      assert.ok(f.x >= FIELD.x0 + 20 && f.x <= FIELD.x1 - 20 && f.y >= FIELD.y0 + 20 && f.y <= FIELD.y1 - 20, `fighter out of field ${f.x},${f.y}`);
+      if (tour) assert.ok(f.x >= CARD.x + CARD.w + 20, `fighter over the tour card at ${f.x}`);
+    }
+  }
+  assert.ok(minD >= SHIELD_R + 60, `closest approach ${minD.toFixed(0)}px`);
+  // moving the opposite way: when the planet heads right, the fighter heads left
+  const g0 = gatewayPos(1000, false), g1 = gatewayPos(2000, false);
+  const f0 = fighterPos(1000, false), f1 = fighterPos(2000, false);
+  assert.ok(Math.sign(g1.x - g0.x) === -Math.sign(f1.x - f0.x));
+});
