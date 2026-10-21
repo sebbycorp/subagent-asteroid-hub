@@ -34,14 +34,16 @@ test('schedule after a quiet spell is not penalised by an old gap', () => {
   assert.equal(schedule(q, { seq: 2 }, 60000), 60000 + DELAY_MS);
 });
 
-test('scouts are round UFOs in four styles, each actor always the same one', async () => {
+test('scouts are starfighters in four designs, each actor always the same one', async () => {
   const { scoutKind, scoutOutline } = await import('./show.mjs');
   const uids = Array.from({ length: 60 }, (_, i) => `uid-${i}-${i * 7919}`);
   const kinds = new Set(uids.map(scoutKind));
-  assert.deepEqual([...kinds].sort(), ['disc', 'ringed', 'spiked', 'twin']);
+  assert.deepEqual([...kinds].sort(), ['awing', 'bwing', 'xwing', 'ywing']);
+  const outlines = [...kinds].map((k) => JSON.stringify(scoutOutline(k)));
+  assert.equal(new Set(outlines).size, 4, 'each design has its own silhouette');
   for (const k of kinds) {
-    const r = scoutOutline(k).map(([x, y]) => Math.hypot(x, y));
-    assert.ok(Math.max(...r) - Math.min(...r) < 0.01, `${k} hull should be a circle`);
+    const pts = scoutOutline(k);
+    assert.ok(Math.max(...pts.map(([x]) => x)) >= 12, `${k} has a nose pointing forward (+x)`);
   }
   for (const u of uids.slice(0, 12)) {
     assert.equal(scoutKind(u), scoutKind(u));
@@ -49,6 +51,16 @@ test('scouts are round UFOs in four styles, each actor always the same one', asy
     assert.ok(pts.length >= 4, `${scoutKind(u)} outline`);
     for (const [x, y] of pts) assert.ok(Math.hypot(x, y) <= 20, `${scoutKind(u)} point ${x},${y} too far`);
   }
+});
+
+test('fighters turn to face their flight path, the short way round', async () => {
+  const { steer } = await import('./show.mjs');
+  let rot = 0;
+  for (let i = 0; i < 200; i++) rot = steer(rot, 0, 10, 1 / 60);
+  assert.ok(Math.abs(rot - Math.PI / 2) < 0.01, `ends facing down, got ${rot}`);
+  const r = steer(3.0, -10, -1.4, 1 / 60); // target ~ -3.0: just past pi
+  assert.ok(r > 3.0, `turns through pi, not all the way back (got ${r})`);
+  assert.equal(steer(1, 0, 0, 1 / 60), 1, 'a stopped fighter keeps its heading');
 });
 
 test('human-in-the-loop captions are never dropped from a burst', async () => {

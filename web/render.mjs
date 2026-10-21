@@ -194,12 +194,20 @@ function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
   glow(NEW, 4);
   stroke(ctx, NEW, 1 / S);
   ctx.shadowBlur = 0;
-  // the kagent mark on the flank (kept upright when the ship faces left)
+  // the kagent mark, large, on an emblem disc on the flank (kept upright
+  // when the ship faces left)
+  ctx.beginPath();
+  ctx.arc(-8, 2, 11.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#05070a';
+  ctx.fill();
+  glow(KAGENT_PURPLE, 8);
+  stroke(ctx, KAGENT_PURPLE, 1.2 / S);
+  ctx.shadowBlur = 0;
   if (KAGENT.complete && KAGENT.naturalWidth) {
     ctx.save();
-    ctx.translate(-12, -2);
+    ctx.translate(-8, 2);
     ctx.scale(Math.sign(face), 1);
-    ctx.drawImage(KAGENT, -7, -7, 14, 14);
+    ctx.drawImage(KAGENT, -10, -10, 20, 20);
     ctx.restore();
   }
   // engines: three glowing thrusters at the stern, flickering
@@ -246,64 +254,113 @@ function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
 export const ALIEN = '#9dff6b'; // the human-in-the-loop request
 const KAGENT_PURPLE = '#9b4dff'; // the kagent robot pilot
 
-// drawScout draws a session's sandbox as a little round UFO (seen from above,
-// spinning) in one of four styles; it powers up (grows) while working.
-// A frozen scout (waiting for a human) is grey and dashed, with its pilot out
-// on the hull holding up the request.
-function drawScout(ctx, r, now, approval) {
+// LIGHT is where the sun sits (upper left of the screen): every fighter is
+// shaded from it whatever way it's flying, which is what makes them read as 3D.
+const LIGHT = { x: -0.6, y: -0.8 };
+
+// metal is a hull gradient for a ship rotated by rot: bright on the side
+// facing the light, dark away from it.
+function metal(ctx, rot, reach, lit = '#d7dee8', dark = '#1b2129') {
+  const c = Math.cos(-rot), s = Math.sin(-rot);
+  const lx = c * LIGHT.x - s * LIGHT.y, ly = s * LIGHT.x + c * LIGHT.y;
+  const g = ctx.createLinearGradient(lx * reach, ly * reach, -lx * reach, -ly * reach);
+  g.addColorStop(0, lit);
+  g.addColorStop(0.55, '#6b7584');
+  g.addColorStop(1, dark);
+  return g;
+}
+
+function shape(ctx, pts) {
+  ctx.beginPath();
+  pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+  ctx.closePath();
+}
+
+// drawScout draws a session's sandbox as a starfighter in one of four
+// designs, shaded like a 3D model, flying nose first; it powers up (grows)
+// while working. Its trim and engines carry its origin colour (new or
+// resumed). A frozen fighter (waiting for a human) goes dark and dashed,
+// with its pilot out on the hull holding up the request.
+export function drawScout(ctx, r, now, approval) {
   const sc = r.scale || 1;
   const color = r.frozen ? DIM : r.failed ? RED : originColor(r);
+  const live = !r.frozen;
   ctx.save();
   ctx.translate(r.x, r.y);
   ctx.rotate(r.rot);
   ctx.scale(sc, sc);
-  const lw = 1.5 / sc;
+  const lw = 1.2 / sc;
   if (r.frozen) ctx.setLineDash([3 / sc, 3 / sc]);
-  // a round UFO seen from above: hull, dome, and a style of its own
-  const lit = (i, n) => !r.frozen && (Math.floor(now / 120) + i) % n === 0;
-  ctx.beginPath();
-  ctx.arc(0, 0, 14, 0, Math.PI * 2);
-  stroke(ctx, color, lw);
-  ctx.beginPath();
-  ctx.arc(0, 0, 5.5, 0, Math.PI * 2); // the dome
-  stroke(ctx, color, lw);
-  ctx.beginPath();
-  ctx.arc(-1.8, -1.8, 2.2, Math.PI, Math.PI * 1.5); // a glint on the dome
-  stroke(ctx, DIM, 0.8 / sc);
-  if (r.kind === 'disc') {
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.arc(Math.cos(a) * 10, Math.sin(a) * 10, lit(i, 3) ? 1.6 : 1, 0, Math.PI * 2);
-      ctx.fillStyle = lit(i, 3) ? color : DIM;
+  const hull = (pts, reach = 16) => {
+    shape(ctx, pts);
+    ctx.fillStyle = live ? metal(ctx, r.rot, reach) : 'rgba(255,255,255,0.05)';
+    ctx.fill();
+    stroke(ctx, live ? 'rgba(255,255,255,0.55)' : DIM, lw);
+  };
+  const engine = (ex, ey, er) => {
+    ctx.beginPath();
+    ctx.arc(ex, ey, er, 0, Math.PI * 2);
+    if (live) {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8 + Math.random() * 4;
+      ctx.fillStyle = color;
       ctx.fill();
+      ctx.shadowBlur = 0;
     }
-  } else if (r.kind === 'ringed') {
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 21, 6, 0.4, 0, Math.PI * 2); // an orbiting band
     stroke(ctx, color, lw * 0.8);
+  };
+  const canopy = (cx, cy, rx, ry) => {
     ctx.beginPath();
-    ctx.arc(0, 0, 9.5, 0, Math.PI * 2);
-    stroke(ctx, DIM, lw * 0.7);
-  } else if (r.kind === 'spiked') {
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fillStyle = live ? '#0b1a2a' : 'transparent';
+    ctx.fill();
+    stroke(ctx, live ? color : DIM, lw * 0.8);
     ctx.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      ctx.moveTo(Math.cos(a) * 14, Math.sin(a) * 14);
-      ctx.lineTo(Math.cos(a) * 19, Math.sin(a) * 19);
+    ctx.ellipse(cx + rx * 0.2, cy - ry * 0.35, rx * 0.45, ry * 0.25, 0, 0, Math.PI * 2);
+    ctx.fillStyle = live ? 'rgba(255,255,255,0.6)' : 'transparent';
+    ctx.fill();
+  };
+  const trim = (pts) => {
+    ctx.beginPath();
+    pts.forEach(([x1, y1, x2, y2]) => { ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); });
+    stroke(ctx, color, lw * 1.3);
+  };
+  if (r.kind === 'ywing') {
+    for (const sy of [-8, 8]) { // engine nacelles
+      hull([[2, sy - 2.2], [-14, sy - 2.2], [-14, sy + 2.2], [2, sy + 2.2]], 6);
+      engine(-14, sy, 2);
     }
-    stroke(ctx, color, lw);
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      ctx.beginPath(); ctx.arc(Math.cos(a) * 19.5, Math.sin(a) * 19.5, 1.2, 0, Math.PI * 2);
-      ctx.fillStyle = lit(i, 2) ? color : DIM; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-2, -6); ctx.lineTo(-2, 6); stroke(ctx, DIM, lw); // the strut
+    hull([[16, 0], [12, -4], [-6, -4], [-8, 0], [-6, 4], [12, 4]], 8); // cockpit pod
+    trim([[4, -4, 4, 4], [-3, -10.2, -3, -5.8], [-3, 5.8, -3, 10.2]]);
+    canopy(9, 0, 3.5, 2.2);
+  } else if (r.kind === 'awing') {
+    const L = [[16, 0], [-8, -13], [-12, -13], [-10, 0]], R = [[16, 0], [-10, 0], [-12, 13], [-8, 13]];
+    shape(ctx, L); ctx.fillStyle = live ? metal(ctx, r.rot, 14, '#e3e9f1', '#3a424e') : 'transparent'; ctx.fill();
+    shape(ctx, R); ctx.fillStyle = live ? metal(ctx, r.rot, 14, '#8e98a6', '#11161c') : 'transparent'; ctx.fill();
+    shape(ctx, [[16, 0], [-8, -13], [-12, -13], [-10, 0], [-12, 13], [-8, 13]]);
+    stroke(ctx, live ? 'rgba(255,255,255,0.55)' : DIM, lw);
+    ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-10, 0); stroke(ctx, 'rgba(255,255,255,0.35)', lw * 0.7); // the ridge
+    trim([[2, -6.5, -6, -11], [2, 6.5, -6, 11]]);
+    engine(-11, -9, 1.8); engine(-11, 9, 1.8);
+    canopy(4, 0, 4, 2.4);
+  } else if (r.kind === 'bwing') {
+    hull([[-4, -17], [-8, -17], [-8, 17], [-4, 17]], 18); // the long main wing
+    hull([[14, 0], [8, -3], [-12, -3], [-12, 3], [8, 3]], 8); // fuselage
+    trim([[-6, -16, -6, -9], [-6, 9, -6, 16]]);
+    ctx.beginPath(); ctx.moveTo(-4, -16); ctx.lineTo(4, -16); ctx.moveTo(-4, 16); ctx.lineTo(4, 16); stroke(ctx, INK, lw * 0.8); // cannons
+    engine(-12, 0, 2.2);
+    canopy(8, 0, 3.6, 2);
+  } else { // xwing
+    for (const sy of [-1, 1]) { // the X-foils: an upper wing (lit) and a lower one peeking out
+      hull([[-1, 2.5 * sy], [-5, 15 * sy], [-10, 15 * sy], [-10, 2.5 * sy]], 16);
+      ctx.beginPath(); ctx.moveTo(-5, 15 * sy); ctx.lineTo(7, 15 * sy); stroke(ctx, INK, lw * 0.8); // wingtip cannon
+      trim([[-4, 8 * sy, -8.5, 8 * sy]]);
+      engine(-10.5, 4 * sy, 1.9);
     }
-  } else { // twin
-    ctx.setLineDash([2 / sc, 2.5 / sc]);
-    ctx.beginPath(); ctx.arc(0, 0, 10.5, 0, Math.PI * 2); stroke(ctx, color, lw * 0.8);
-    ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); stroke(ctx, DIM, lw * 0.7);
-    if (!r.frozen) ctx.setLineDash([]); else ctx.setLineDash([3 / sc, 3 / sc]);
-    ctx.beginPath(); ctx.arc(0, 0, 1.8, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+    hull([[18, 0], [6, -2.2], [-10, -3], [-12, 0], [-10, 3], [6, 2.2]], 10); // fuselage
+    ctx.beginPath(); ctx.arc(-4, 0, 1.6, 0, Math.PI * 2); stroke(ctx, color, lw * 0.8); // the droid
+    canopy(3, 0, 3.6, 1.8);
   }
   ctx.restore();
   ctx.setLineDash([]);
@@ -710,7 +767,7 @@ const LOGO = typeof Image === 'undefined' ? {} : Object.assign(new Image(), { sr
 // drawGatewayPlanet draws agentgateway: a ringed planet inside one hexagonal
 // shield that flares as calls pass, labelled with kagent's models. Slightly
 // dimmed until the gateway has reported a call.
-function drawGatewayPlanet(ctx, world, now) {
+export function drawGatewayPlanet(ctx, world, now) {
   const seen = world.state?.gateway?.seen;
   const prev = ctx.globalAlpha;
   ctx.globalAlpha = prev * (seen ? 1 : 0.6);
@@ -725,20 +782,59 @@ function drawGatewayPlanet(ctx, world, now) {
   hexagon(ctx, x, y, SHIELD_R - 6, -now / 3500); // …its inner layer the other way
   stroke(ctx, GW, 1);
   ctx.restore();
-  // the planet: body, faint bands, a tilted ring, the agentgateway mark inside
+  // the Death Star: a sphere lit from the upper left, its equatorial trench,
+  // surface plating, and the superlaser dish holding the agentgateway mark
+  const R = PLANET_R;
+  const body = ctx.createRadialGradient(x - R * 0.4, y - R * 0.45, R * 0.08, x, y, R * 1.02);
+  body.addColorStop(0, '#d9dfe6');
+  body.addColorStop(0.5, '#6e7883');
+  body.addColorStop(1, '#101419');
+  ctx.save();
   ctx.beginPath();
-  ctx.arc(x, y, PLANET_R, 0, Math.PI * 2);
-  stroke(ctx, INK, 1.8);
-  for (const [dy, rx] of [[-46, 41], [46, 41]]) {
-    ctx.beginPath();
-    ctx.ellipse(x, y + dy, rx, 5, 0, 0, Math.PI);
-    stroke(ctx, DIM, 1);
+  ctx.arc(x, y, R, 0, Math.PI * 2);
+  ctx.fillStyle = body;
+  ctx.fill();
+  ctx.clip();
+  ctx.beginPath(); // plating: latitude seams
+  for (const k of [-0.6, -0.3, 0.3, 0.6]) {
+    const yy = y + k * R, rx = Math.sqrt(1 - k * k) * R;
+    ctx.ellipse(x, yy, rx, R * 0.08, 0, 0, Math.PI);
   }
+  stroke(ctx, 'rgba(0,0,0,0.35)', 0.8);
+  ctx.beginPath(); // the trench: a dark band with a lit lower lip
+  ctx.ellipse(x, y + R * 0.06, R, R * 0.1, 0, 0, Math.PI);
+  stroke(ctx, 'rgba(0,0,0,0.75)', 2.2);
+  ctx.beginPath();
+  ctx.ellipse(x, y + R * 0.06 + 1.6, R, R * 0.1, 0, 0.1 * Math.PI, 0.9 * Math.PI);
+  stroke(ctx, 'rgba(255,255,255,0.35)', 0.7);
+  for (let i = 0; i < 14; i++) { // city lights on the dark side
+    const a2 = i * 2.39, rr = R * (0.35 + ((i * 37) % 60) / 100);
+    const px = x + Math.cos(a2) * rr, py = y + Math.sin(a2) * rr;
+    if (px - x + py - y < R * 0.2) continue;
+    ctx.fillStyle = (Math.floor(now / 700) + i) % 5 ? 'rgba(255,255,255,0.55)' : GW;
+    ctx.fillRect(px, py, 1, 1);
+  }
+  ctx.restore();
+  ctx.beginPath(); // the limb
+  ctx.arc(x, y, R, 0, Math.PI * 2);
+  stroke(ctx, 'rgba(255,255,255,0.5)', 1);
+  const dx = x - R * 0.36, dy = y - R * 0.4, dr = R * 0.34; // the dish: concave, so lit low-right
+  const dish = ctx.createRadialGradient(dx + dr * 0.35, dy + dr * 0.35, dr * 0.1, dx, dy, dr);
+  dish.addColorStop(0, '#9aa4b0');
+  dish.addColorStop(1, '#1a1f26');
+  ctx.beginPath();
+  ctx.arc(dx, dy, dr, 0, Math.PI * 2);
+  ctx.fillStyle = dish;
+  ctx.fill();
+  ctx.shadowColor = GW;
+  ctx.shadowBlur = 6 + flare * 10;
+  stroke(ctx, GW, 1 + flare);
+  ctx.shadowBlur = 0;
   // the ring slowly precesses, with a moon riding it
   const tilt = -0.32 + 0.12 * Math.sin(now / 4000);
   ctx.beginPath();
   ctx.ellipse(x, y, PLANET_R * 1.5, PLANET_R * 0.3, tilt, 0.12 * Math.PI, 0.88 * Math.PI, true);
-  stroke(ctx, INK, 1.4);
+  stroke(ctx, DIM, 1);
   const moon = moonAt({ x, y }, now / 1600, tilt);
   if (moon.visible) {
     ctx.beginPath();
@@ -746,8 +842,8 @@ function drawGatewayPlanet(ctx, world, now) {
     stroke(ctx, INK, 1.2);
   }
   if (LOGO.complete && LOGO.naturalWidth) {
-    const size = PLANET_R * 1.3; // small mark at the planet's core
-    ctx.drawImage(LOGO, x - size / 2, y - size / 2, size, size);
+    const size = dr * 1.6; // the agentgateway mark in the superlaser dish
+    ctx.drawImage(LOGO, dx - size / 2, dy - size / 2, size, size);
   }
   text(ctx, seen ? 'AGENTGATEWAY' : 'AGENTGATEWAY · NO CALLS YET', x, y - SHIELD_R - 12, { size: 11, align: 'center', spacing: 3, color: GW });
   // the models kagent uses
@@ -869,7 +965,7 @@ function drawGatewayFx(ctx, world, now) {
     // the shield: the call left this sandbox only through the gateway
     if (fx.rock && !fx.ingress) {
       const sc = fx.rock.scale || 1;
-      ctx.setLineDash([2, 4]); // dotted, so it reads as a field around the UFO
+      ctx.setLineDash([2, 4]); // dotted, so it reads as a field around the fighter
       hexagon(ctx, fx.rock.x, fx.rock.y, 34 * sc + Math.sin(k * Math.PI * 6) * 2);
       stroke(ctx, GW, 1.8);
       ctx.setLineDash([]);

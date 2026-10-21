@@ -53,21 +53,38 @@ function seeded(str) {
   };
 }
 
-const SCOUT_KINDS = ['disc', 'ringed', 'spiked', 'twin'];
+const SCOUT_KINDS = ['xwing', 'ywing', 'awing', 'bwing'];
 
-// scoutKind picks the UFO style for an actor, always the same one, so a
-// resumed UFO is recognisably the one that froze.
+// scoutKind picks the starfighter design for an actor, always the same one, so a
+// session keeps its look across suspends and resumes.
 export function scoutKind(uid) {
   return SCOUT_KINDS[Math.floor(seeded(`kind:${uid}`)() * SCOUT_KINDS.length)];
 }
 
-// scoutOutline is a UFO's round hull (seen from above): what breaks apart
-// when Substrate freezes it.
-export function scoutOutline() {
-  return Array.from({ length: 14 }, (_, i) => {
-    const a = (i / 14) * Math.PI * 2;
-    return [Math.cos(a) * 14, Math.sin(a) * 14];
-  });
+// Each fighter's hull seen from above, nose along +x: what breaks apart when
+// Substrate freezes it.
+const OUTLINES = {
+  // X-foils: needle nose, four wings spread in an X, engines at the roots
+  xwing: [[18, 0], [6, -2], [-2, -3], [-6, -15], [-10, -15], [-10, -3], [-12, -2], [-12, 2], [-10, 3], [-10, 15], [-6, 15], [-2, 3], [6, 2]],
+  // cockpit pod up front, two long engine nacelles behind
+  ywing: [[16, 0], [12, -4], [4, -4], [2, -10], [-14, -10], [-14, -6], [-6, -6], [-6, 6], [-14, 6], [-14, 10], [2, 10], [4, 4], [12, 4]],
+  // a fast wedge
+  awing: [[16, 0], [-8, -13], [-12, -13], [-10, 0], [-12, 13], [-8, 13]],
+  // one long main wing crossing a short fuselage
+  bwing: [[14, 0], [8, -3], [-4, -3], [-4, -17], [-8, -17], [-8, -3], [-12, -2], [-12, 2], [-8, 3], [-8, 17], [-4, 17], [-4, 3], [8, 3]],
+};
+
+export function scoutOutline(kind) {
+  return OUTLINES[kind] || OUTLINES.xwing;
+}
+
+// steer turns a fighter's heading toward its flight path, easing in and
+// always the short way round. A stopped fighter keeps its heading.
+export function steer(rot, vx, vy, dt) {
+  if (!vx && !vy) return rot;
+  const TAU = Math.PI * 2;
+  const d = ((((Math.atan2(vy, vx) - rot + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
+  return rot + d * Math.min(1, dt * 6);
 }
 
 export function aimAngle(ship, target) {

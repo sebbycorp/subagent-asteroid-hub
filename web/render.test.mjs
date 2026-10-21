@@ -107,3 +107,38 @@ test('the mothership faces the way it is flying', async () => {
     });
   }
 });
+
+function recordingCtx() {
+  const calls = [];
+  let depth = 0;
+  const ctx = new Proxy({ globalAlpha: 1, shadowBlur: 0 }, {
+    get(t, k) {
+      if (k in t) return t[k];
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return (...a) => { calls.push(k); return { addColorStop() {} }; };
+      return (...a) => { calls.push(k); if (k === 'save') depth++; if (k === 'restore') depth--; };
+    },
+    set(t, k, v) { t[k] = v; return true; },
+  });
+  return { ctx, calls, depth: () => depth };
+}
+
+test('each starfighter is shaded like a 3D model and leaves the canvas as it found it', async () => {
+  const { drawScout } = await import('./render.mjs');
+  for (const kind of ['xwing', 'ywing', 'awing', 'bwing']) {
+    for (const frozen of [false, true]) {
+      const { ctx, calls, depth } = recordingCtx();
+      drawScout(ctx, { x: 100, y: 100, rot: 1, kind, agent: 'a', sub: 's', frozen }, 1000, null);
+      assert.equal(depth(), 0, `${kind} balances save/restore`);
+      if (!frozen) assert.ok(calls.includes('createLinearGradient'), `${kind} has metal shading`);
+      assert.ok(calls.filter((c) => c === 'stroke').length >= 6, `${kind} is detailed`);
+    }
+  }
+});
+
+test('the agentgateway Death Star is a shaded sphere', async () => {
+  const { drawGatewayPlanet } = await import('./render.mjs');
+  const { ctx, calls, depth } = recordingCtx();
+  drawGatewayPlanet(ctx, { state: { gateway: { seen: true }, snapshot: { models: ['qwen3:8b'] } }, gwPos: { x: 400, y: 300 } }, 1000);
+  assert.equal(depth(), 0);
+  assert.ok(calls.includes('createRadialGradient'), 'lit like a sphere');
+});
