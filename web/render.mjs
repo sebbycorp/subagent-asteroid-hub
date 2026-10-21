@@ -130,17 +130,44 @@ export function saucerSpots(pools, t = 0) {
 // The kagent mark, drawn in the worker-pool ship's dome.
 const KAGENT = typeof Image === 'undefined' ? {} : Object.assign(new Image(), { src: 'kagent-mark.png' });
 
-// drawSaucer draws a worker pool as kagent's capital ship, a wedge-hulled
-// Republic destroyer in side profile (red Republic markings along its deck
-// and prow), launching Rebel ships: bridge tower with twin shield domes, the kagent
-// mark on its flank, glowing engines, running lights along the hull trench,
-// one hangar light per worker (lit while hosting an actor), and a tractor
-// beam from the hangar when it launches a UFO. It flies nose first.
-function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
+// vmetal is a top-lit vertical metal gradient between y0 (lit) and y1 (dark).
+function vmetal(ctx, y0, y1, lit, dark) {
+  const g = ctx.createLinearGradient(0, y0, 0, y1);
+  g.addColorStop(0, lit);
+  g.addColorStop(1, dark);
+  return g;
+}
+
+// sphere fills a small lit ball (a shield dome, a sensor).
+function sphere(ctx, x, y, r) {
+  const g = ctx.createRadialGradient(x - r * 0.4, y - r * 0.45, r * 0.1, x, y, r);
+  g.addColorStop(0, '#f2f5f8');
+  g.addColorStop(0.6, '#7d8794');
+  g.addColorStop(1, '#151a20');
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = g;
+  ctx.fill();
+}
+
+// drawSaucer draws a worker pool as kagent's capital ship: a wedge-hulled
+// Republic destroyer in side profile, shaded like a 3D model (a sunlit upper
+// deck over a dark lower hull), with a stepped superstructure, a bridge
+// tower with lit shield domes, red Republic markings, rows of lit windows,
+// three engine bells with exhaust plumes, and the kagent emblem on its
+// flank. One hangar light per worker (lit while hosting an actor), and a
+// tractor beam from the hangar when it launches a ship. It flies nose first.
+export function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
   const { x, y } = s;
   const S = SAUCER_SCALE;
   const face = s.face ?? 1;
   const glow = (color, blur) => { ctx.shadowColor = color; ctx.shadowBlur = blur; };
+  const fillShape = (pts, fill, edge, w = 0.9) => {
+    shape(ctx, pts);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    if (edge) stroke(ctx, edge, w / S);
+  };
   ctx.save();
   ctx.translate(x, y + 4);
   // tractor beam from the hangar (not mirrored, so it always drops straight)
@@ -149,7 +176,7 @@ function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
     const prev = ctx.globalAlpha;
     ctx.globalAlpha = prev * (1 - bk) * 0.7;
     ctx.beginPath();
-    const hx = 12 * S * face;
+    const hx = 26 * S * face;
     ctx.moveTo(hx - 10, 16); ctx.lineTo(hx - 40, 70);
     ctx.moveTo(hx + 10, 16); ctx.lineTo(hx + 40, 70);
     for (let i = 1; i <= 5; i++) {
@@ -160,74 +187,81 @@ function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
     ctx.globalAlpha = prev;
   }
   ctx.scale(S * Math.sign(face) * Math.max(Math.abs(face), 0.15), S);
-  // wedge hull: needle prow, top deck rising to the superstructure, flat keel
-  const hull = [[74, 3], [-28, -8], [-34, -12], [-60, -12], [-66, -8], [-66, 9], [-40, 12], [20, 9]];
-  poly(ctx, hull, 0, 0);
-  ctx.fillStyle = 'rgba(255,255,255,0.04)';
-  ctx.fill();
-  glow(NEW, 5);
-  stroke(ctx, INK, 1.4 / S);
-  ctx.shadowBlur = 0;
-  // Republic markings: a red stripe along the deck and a red prow
+  // engine plumes behind the stern
+  for (const ey of [-6, 1, 7]) {
+    const f = 12 + Math.random() * 6;
+    const g = ctx.createLinearGradient(-66, 0, -66 - f, 0);
+    g.addColorStop(0, 'rgba(79,216,255,0.85)');
+    g.addColorStop(1, 'rgba(79,216,255,0)');
+    shape(ctx, [[-66, ey - 2.6], [-66 - f, ey], [-66, ey + 2.6]]);
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+  // the hull: a sunlit upper deck over a dark lower hull, split at the trench
+  const upper = [[74, 3], [-28, -8], [-34, -12], [-60, -12], [-66, -8], [-66, 1]];
+  const lower = [[74, 3], [-66, 1], [-66, 9], [-40, 12], [20, 9]];
+  fillShape(lower, vmetal(ctx, 1, 12, '#5d6671', '#0e1217'));
+  fillShape(upper, vmetal(ctx, -12, 3, '#e6ebf1', '#77818e'));
+  // stepped superstructure
+  fillShape([[-30, -10.4], [-36, -15], [-58, -15], [-62, -11.5], [-60, -12], [-34, -12]], vmetal(ctx, -15, -10, '#f2f5f8', '#8e98a5'), 'rgba(255,255,255,0.5)');
+  // red Republic markings: deck stripe, prow, dorsal chevrons
   ctx.beginPath();
-  ctx.moveTo(70, 1.6); ctx.lineTo(-24, -6.6);
-  stroke(ctx, RED, 1.6 / S);
-  shape(ctx, [[74, 3], [62, 1.9], [62, 4.6]]);
-  ctx.fillStyle = RED;
-  ctx.fill();
-  // hull trench and deck plating
+  ctx.moveTo(70, 1.4); ctx.lineTo(-24, -6.8);
+  stroke(ctx, RED, 1.8 / S);
+  fillShape([[74, 3], [60, 1.6], [60, 4.4]], RED);
   ctx.beginPath();
-  ctx.moveTo(70, 3); ctx.lineTo(-66, 1);
-  for (let px = 60; px > -28; px -= 11) {
+  for (const cx of [44, 38]) { ctx.moveTo(cx, -0.6); ctx.lineTo(cx - 4, -2.2); ctx.lineTo(cx - 8, -0.9); }
+  stroke(ctx, RED, 1.1 / S);
+  // deck plating and the trench
+  ctx.beginPath();
+  for (let px = 56; px > -26; px -= 10) {
     const top = 3 - ((74 - px) / 102) * 11;
-    ctx.moveTo(px, top + 1.5); ctx.lineTo(px - 4, top + 1.5);
+    ctx.moveTo(px, top + 1.2); ctx.lineTo(px - 5, top + 2.8);
   }
-  ctx.moveTo(-34, -12); ctx.lineTo(-34, 1); ctx.moveTo(-60, -12); ctx.lineTo(-60, 1);
-  stroke(ctx, DIM, 0.8 / S);
-  // bridge tower: neck, command bar, twin shield domes
+  stroke(ctx, 'rgba(0,0,0,0.3)', 0.8 / S);
   ctx.beginPath();
-  ctx.moveTo(-42, -12); ctx.lineTo(-45, -19); ctx.lineTo(-51, -19); ctx.lineTo(-54, -12);
-  ctx.rect(-60, -24, 24, 5);
-  stroke(ctx, INK, 1.2 / S);
-  for (const dx of [-55, -41]) {
-    ctx.beginPath();
-    ctx.moveTo(dx, -24); ctx.lineTo(dx, -27);
-    stroke(ctx, INK, 0.9 / S);
-    ctx.beginPath();
-    ctx.arc(dx, -29, 2.4, 0, Math.PI * 2);
-    stroke(ctx, INK, 1 / S);
+  ctx.moveTo(72, 3); ctx.lineTo(-66, 1);
+  stroke(ctx, 'rgba(0,0,0,0.7)', 1.4 / S);
+  // rows of lit windows along the lower hull, slowly changing
+  for (let i = 0; i < 40; i++) {
+    const px = 56 - i * 3, row = i % 2;
+    const keel = px > 20 ? 9 - ((px - 20) / 54) * 6 : 9 + ((20 - px) / 60) * 3;
+    const py = 3.2 + row * 2 + (keel - 9) * 0.2;
+    if (py > keel - 1.2) continue;
+    const on = ((i * 7 + Math.floor(now / 1500)) % 5) !== 0;
+    ctx.fillStyle = on ? (i % 9 === 0 ? 'rgba(255,191,71,0.9)' : 'rgba(220,240,255,0.75)') : 'rgba(255,255,255,0.15)';
+    ctx.fillRect(px, py, 1, 0.6);
   }
-  ctx.beginPath();
-  ctx.moveTo(-58, -21.5); ctx.lineTo(-38, -21.5);
+  // the whole hull outlined, with a faint glow
+  shape(ctx, [[74, 3], [-28, -8], [-34, -12], [-60, -12], [-66, -8], [-66, 9], [-40, 12], [20, 9]]);
   glow(NEW, 4);
+  stroke(ctx, 'rgba(255,255,255,0.6)', 1 / S);
+  ctx.shadowBlur = 0;
+  // bridge tower: neck, command bar, lit shield domes on stalks
+  fillShape([[-42, -15], [-45, -21], [-51, -21], [-54, -15]], vmetal(ctx, -21, -15, '#c9d1da', '#4c5560'), 'rgba(255,255,255,0.5)');
+  fillShape([[-60, -26], [-36, -26], [-36, -21], [-60, -21]], vmetal(ctx, -26, -21, '#f2f5f8', '#6f7a87'), 'rgba(255,255,255,0.6)');
+  ctx.beginPath();
+  ctx.moveTo(-58, -23.5); ctx.lineTo(-38, -23.5);
+  glow(NEW, 5);
   stroke(ctx, NEW, 1 / S);
   ctx.shadowBlur = 0;
-  // the kagent mark, large, on an emblem disc on the flank (kept upright
-  // when the ship faces left)
-  ctx.beginPath();
-  ctx.arc(-8, 2, 11.5, 0, Math.PI * 2);
-  ctx.fillStyle = '#05070a';
-  ctx.fill();
-  glow(KAGENT_PURPLE, 8);
-  stroke(ctx, KAGENT_PURPLE, 1.2 / S);
-  ctx.shadowBlur = 0;
-  if (KAGENT.complete && KAGENT.naturalWidth) {
-    ctx.save();
-    ctx.translate(-8, 2);
-    ctx.scale(Math.sign(face), 1);
-    ctx.drawImage(KAGENT, -10, -10, 20, 20);
-    ctx.restore();
+  for (const dx of [-55, -41]) {
+    ctx.beginPath();
+    ctx.moveTo(dx, -26); ctx.lineTo(dx, -28.6);
+    stroke(ctx, 'rgba(255,255,255,0.7)', 0.9 / S);
+    sphere(ctx, dx, -31, 2.6);
   }
-  // engines: three glowing thrusters at the stern, flickering
+  // engine bells: three glowing thrusters at the stern
   for (const ey of [-6, 1, 7]) {
+    const g = ctx.createRadialGradient(-66, ey, 0.3, -66, ey, 3.8);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(0.4, NEW);
+    g.addColorStop(1, 'rgba(79,216,255,0)');
     ctx.beginPath();
-    ctx.arc(-67, ey, 2.3, 0, Math.PI * 2);
+    ctx.arc(-66, ey, 3.8, 0, Math.PI * 2);
     glow(NEW, 10 + Math.random() * 6);
-    ctx.fillStyle = NEW;
+    ctx.fillStyle = g;
     ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(-68, ey - 1.6); ctx.lineTo(-74 - Math.random() * 5, ey); ctx.lineTo(-68, ey + 1.6);
-    stroke(ctx, NEW, 0.8 / S);
   }
   ctx.shadowBlur = 0;
   // running lights chasing along the trench toward the prow
@@ -243,17 +277,40 @@ function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
   const workers = s.pool.workers || [];
   const gap = 9;
   workers.forEach((w, i) => {
-    const px = 12 - ((workers.length - 1) * gap) / 2 + i * gap;
+    const px = 26 - ((workers.length - 1) * gap) / 2 + i * gap; // forward of the emblem
     ctx.beginPath();
-    ctx.rect(px - 2.6, 6.5, 5.2, 2.4);
-    if (busyWorkers.has(w)) {
-      glow(RESUMED, 6);
-      ctx.fillStyle = RESUMED;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
-    stroke(ctx, INK, 0.9 / S);
+    ctx.rect(px - 2.6, 5, 5.2, 2.2);
+    ctx.fillStyle = busyWorkers.has(w) ? RESUMED : '#0b0e12';
+    if (busyWorkers.has(w)) glow(RESUMED, 6);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    stroke(ctx, 'rgba(255,255,255,0.7)', 0.9 / S);
   });
+  // the kagent emblem on the flank: a dark disc, a glowing purple ring with a
+  // slowly turning outer ring, the mark kept upright when facing left
+  ctx.beginPath();
+  ctx.arc(-8, 2, 12.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#05070a';
+  ctx.fill();
+  glow(KAGENT_PURPLE, 10);
+  stroke(ctx, KAGENT_PURPLE, 1.4 / S);
+  ctx.shadowBlur = 0;
+  ctx.save();
+  ctx.translate(-8, 2);
+  ctx.rotate(now / 3000);
+  ctx.setLineDash([2.2, 2.2]);
+  ctx.beginPath();
+  ctx.arc(0, 0, 14.5, 0, Math.PI * 2);
+  stroke(ctx, KAGENT_PURPLE, 0.9 / S);
+  ctx.setLineDash([]);
+  ctx.restore();
+  if (KAGENT.complete && KAGENT.naturalWidth) {
+    ctx.save();
+    ctx.translate(-8, 2);
+    ctx.scale(Math.sign(face), 1);
+    ctx.drawImage(KAGENT, -11, -11, 22, 22);
+    ctx.restore();
+  }
   ctx.restore();
   text(ctx, s.pool.name, x, y + 42, { size: 10, align: 'center', spacing: 2 });
   text(ctx, `KAGENT WORKER POOL · ${workers.length} WORKER${workers.length === 1 ? '' : 'S'}`, x, y + 54, { size: 7, align: 'center', color: DIM, spacing: 1 });

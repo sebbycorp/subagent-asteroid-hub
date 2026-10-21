@@ -134,3 +134,15 @@ test('the agentgateway Death Star is a shaded sphere', async () => {
   assert.equal(depth(), 0);
   assert.ok(calls.includes('createRadialGradient'), 'lit like a sphere');
 });
+
+test('the kagent destroyer is shaded like a 3D model, facing either way', async () => {
+  const { drawSaucer } = await import('./render.mjs');
+  for (const face of [1, -1, 0.3]) {
+    const { ctx, calls, depth } = recordingCtx();
+    const pool = { name: 'kagent-default', workers: ['w1', 'w2', 'w3'] };
+    drawSaucer(ctx, { pool, x: 400, y: 96, face }, new Set(['w2']), 1000, 900);
+    assert.equal(depth(), 0, 'every save is restored');
+    assert.ok(calls.filter((c) => c === 'createLinearGradient').length >= 3, 'hull faces and superstructure are metal-shaded');
+    assert.ok(calls.includes('createRadialGradient'), 'domes and engines lit as spheres');
+  }
+});
