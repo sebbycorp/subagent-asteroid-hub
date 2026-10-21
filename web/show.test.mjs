@@ -116,3 +116,29 @@ test('liveLine describes the focused actor and density from state', async () => 
   assert.equal(liveLine({ kind: 'density', focus: [] }, state), 'LIVE: 2 SESSIONS · 1 WORKER · 1 RUNNING NOW');
   assert.equal(liveLine({ kind: 'create', focus: ['missing'] }, state), 'LIVE: WAITING FOR THE ACTOR…');
 });
+
+test('log lines: short, real, one per event', async () => {
+  const { logLine } = await import('./show.mjs');
+  const at = '2026-10-21T01:23:45.678Z';
+  assert.equal(logLine({ src: 'event', kind: 'resume', agent: 'asteroids-demo-poet', at }), '01:23:45 RESUME   POET');
+  assert.equal(logLine({ src: 'event', kind: 'running', agent: 'asteroids-demo-poet', restoreMs: 125, at }), '01:23:45 RUNNING  POET 125MS');
+  assert.equal(logLine({ src: 'event', kind: 'running', agent: 'hello-substrate', startMs: 300, at }), '01:23:45 STARTED  HELLO-SUBSTRATE 300MS');
+  assert.equal(logLine({ src: 'event', kind: 'suspend', agent: 'asteroids-demo-poet', suspendMs: 4, at }), '01:23:45 SUSPEND  POET INSTANT');
+  assert.equal(logLine({ src: 'gateway', kind: 'llm', agent: 'asteroids-demo-poet', model: 'qwen3:8b', durationMs: 1775, at }), '01:23:45 ⬡ POET → QWEN3:8B 1.8S');
+  assert.equal(logLine({ src: 'gateway', kind: 'tool', agent: 'asteroids-demo-poet', tool: 'k8s_get_resources', durationMs: 54, at }), '01:23:45 ⬡ POET → K8S_GET_RESOURCES 54MS');
+  assert.equal(logLine({ src: 'gateway', kind: 'chat', durationMs: 4273, at }), '01:23:45 ⬡ CHAT IN → AGENT 4.3S');
+});
+
+test('gateway requests map to the outside world they reach', async () => {
+  const { planetFor } = await import('./show.mjs');
+  assert.equal(planetFor({ kind: 'llm', target: 'qwen', model: 'qwen3:8b' }).key, 'model');
+  assert.equal(planetFor({ kind: 'llm', target: 'qwen', model: 'qwen3:8b' }).label, 'QWEN3:8B');
+  assert.equal(planetFor({ kind: 'tool', target: 'kagent-tools' }).key, 'tools');
+  assert.equal(planetFor({ kind: 'chat', target: 'kagent-a2a' }).key, 'people');
+});
+
+test('gateway chapter live line counts this agent\'s gateway calls', async () => {
+  const { liveLine } = await import('./show.mjs');
+  const line = liveLine({ kind: 'gateway', focus: ['s1'] }, { snapshot: { actors: {} } }, { llm: 2, tool: 1 });
+  assert.equal(line, 'LIVE: AGENTGATEWAY HANDLED 2 MODEL CALLS · 1 TOOL CALL');
+});

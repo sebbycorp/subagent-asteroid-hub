@@ -2,12 +2,27 @@
 
 export const W = 1280;
 export const H = 720;
-export const FIELD = { x0: 20, x1: 990, y0: 150, y1: 610 };
+// The left strip is the outside world (your model, tools, people chatting in)
+// behind agentgateway's gate; asteroids fly to its right.
+export const FIELD = { x0: 200, x1: 990, y0: 150, y1: 610 };
+export const GATE = { x: 176, y0: 158, y1: 604 };
+export const PLANETS = {
+  model: { x: 86, y: 248, r: 30 },
+  tools: { x: 86, y: 400, r: 24 },
+  people: { x: 86, y: 540, r: 20 },
+};
 export const VAULT = { x: 1010, y: 150, w: 250, h: 450 };
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const INK = '#fff';
 const DIM = 'rgba(255,255,255,0.45)';
 const RED = '#ff5a4f';
+export const NEW = '#4fd8ff'; // a new session, cloned from the golden snapshot
+export const RESUMED = '#ffbf47'; // a session restored from its own snapshot
+export const GW = '#7dffb0'; // agentgateway
+
+function originColor(r) {
+  return r.origin === 'new' ? NEW : r.origin === 'resumed' ? RESUMED : INK;
+}
 
 export function setup(canvas) {
   const ctx = canvas.getContext('2d');
@@ -92,7 +107,7 @@ function drawSaucer(ctx, s, busyWorkers) {
 
 function drawRock(ctx, r) {
   poly(ctx, r.shape, r.x, r.y, r.rot);
-  stroke(ctx, r.failed ? RED : INK);
+  stroke(ctx, r.failed ? RED : originColor(r));
   // dashed leader to the label
   const lx = r.x + 34, ly = r.y - 22;
   ctx.setLineDash([2, 3]);
@@ -103,6 +118,7 @@ function drawRock(ctx, r) {
   ctx.setLineDash([]);
   text(ctx, r.agent, lx, ly, { size: 10, spacing: 1 });
   text(ctx, r.sub, lx, ly + 13, { size: 9, spacing: 1, color: DIM });
+  if (r.tag) text(ctx, r.tag, lx, ly + 25, { size: 8, spacing: 1, color: originColor(r) });
 }
 
 export function drawShip(ctx, ship) {
@@ -128,6 +144,33 @@ function capsule(ctx, x, y) {
   stroke(ctx, INK, 1.2);
 }
 
+// fit trims a line to a pixel width at the current font.
+function fit(ctx, str, width) {
+  if (ctx.measureText(str).width <= width) return str;
+  while (str.length > 1 && ctx.measureText(str + '…').width > width) str = str.slice(0, -1);
+  return str + '…';
+}
+
+const LOG_TOP = VAULT.y + 172;
+
+function drawLog(ctx, lines) {
+  ctx.beginPath();
+  ctx.moveTo(VAULT.x + 10, LOG_TOP - 14);
+  ctx.lineTo(VAULT.x + VAULT.w - 10, LOG_TOP - 14);
+  stroke(ctx, DIM, 1);
+  text(ctx, 'LOG', VAULT.x + 12, LOG_TOP, { size: 10, spacing: 2 });
+  const rows = Math.floor((VAULT.y + VAULT.h - 62 - (LOG_TOP + 14)) / 12);
+  const shown = lines.slice(-rows);
+  ctx.font = `8px ${FONT}`;
+  ctx.letterSpacing = '0.5px';
+  shown.forEach((l, i) => {
+    const y = LOG_TOP + 16 + i * 12;
+    ctx.fillStyle = l.color || DIM;
+    ctx.textAlign = 'left';
+    ctx.fillText(fit(ctx, l.text, VAULT.w - 24), VAULT.x + 12, y);
+  });
+}
+
 function drawVault(ctx, count) {
   ctx.beginPath();
   ctx.rect(VAULT.x, VAULT.y, VAULT.w, VAULT.h);
@@ -137,7 +180,7 @@ function drawVault(ctx, count) {
   const shown = Math.min(count, 200);
   for (let i = 0; i < shown; i++) {
     const s = vaultSlot(i);
-    if (s.y > VAULT.y + VAULT.h - 60) break;
+    if (s.y > LOG_TOP - 24) break; // capsules above, the log below
     capsule(ctx, s.x, s.y);
   }
   text(ctx, `${count} ACTOR${count === 1 ? '' : 'S'} STORED`, VAULT.x + VAULT.w / 2, VAULT.y + VAULT.h - 34, { size: 12, align: 'center' });
@@ -182,7 +225,11 @@ export function draw(ctx, world, now) {
   drawTopBar(ctx, st, busy.size, world.rocks.size, world.vault.size);
   for (const s of saucerSpots(st.snapshot?.pools || [])) drawSaucer(ctx, s, busy);
   drawVault(ctx, world.vault.size);
+  drawLog(ctx, world.log || []);
+  drawOutside(ctx, world, now);
+  drawLegend(ctx);
   for (const r of world.rocks.values()) drawRock(ctx, r);
+  drawGatewayFx(ctx, world, now);
   for (const f of world.fragments) {
     ctx.globalAlpha = Math.max(0, 1 - (now - f.born) / 1200) * (dim ? 0.35 : 1);
     ctx.beginPath();
@@ -254,7 +301,7 @@ function drawFocus(ctx, world, now) {
   }
 }
 
-export const CARD = { x: 30, y: 150, w: 540 };
+export const CARD = { x: 210, y: 150, w: 450 };
 
 function drawTourCard(ctx, tour, live, now) {
   const lines = [];
@@ -289,4 +336,123 @@ function drawTourCard(ctx, tour, live, now) {
 // steps aside so the card never hides the action.
 export function activeField(tourOpen) {
   return tourOpen ? { ...FIELD, x0: CARD.x + CARD.w + 30 } : FIELD;
+}
+
+function drawLegend(ctx) {
+  const items = [[NEW, '● NEW SESSION'], [RESUMED, '● RESUMED'], [GW, '⬡ AGENTGATEWAY']];
+  let x = 20;
+  for (const [c, label] of items) {
+    text(ctx, label, x, 64, { size: 9, spacing: 1, color: c });
+    ctx.font = `9px ${FONT}`;
+    x += ctx.measureText(label).width + label.length + 18;
+  }
+}
+
+function hexagon(ctx, x, y, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI / 6 + (i * Math.PI) / 3;
+    const X = x + Math.cos(a) * r, Y = y + Math.sin(a) * r;
+    i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y);
+  }
+  ctx.closePath();
+}
+
+function planet(ctx, p, label, sub, color) {
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+  stroke(ctx, color, 1.4);
+  ctx.beginPath();
+  ctx.ellipse(p.x, p.y, p.r * 1.6, p.r * 0.38, -0.35, 0, Math.PI * 2);
+  stroke(ctx, color, 1);
+  text(ctx, label, p.x, p.y + p.r + 18, { size: 9, align: 'center', spacing: 1, color });
+  if (sub) text(ctx, sub, p.x, p.y + p.r + 30, { size: 8, align: 'center', spacing: 1, color: DIM });
+}
+
+// drawOutside draws the outside world and agentgateway's gate between it and
+// the sandboxes. Dim until the gateway has reported a request.
+function drawOutside(ctx, world, now) {
+  const seen = world.state?.gateway?.seen;
+  const prev = ctx.globalAlpha;
+  ctx.globalAlpha = prev * (seen ? 1 : 0.35);
+  text(ctx, 'OUTSIDE', 86, 170, { size: 9, align: 'center', spacing: 2, color: DIM });
+  planet(ctx, PLANETS.model, world.modelLabel || 'MODEL', 'LLM', INK);
+  planet(ctx, PLANETS.tools, 'K8S TOOLS', 'MCP', INK);
+  planet(ctx, PLANETS.people, 'CHATS IN', 'A2A', INK);
+  // the gate: a column of small hexagons
+  const flash = Math.max(0, 1 - (now - (world.gateFlash || -1e9)) / 500);
+  for (let y = GATE.y0; y <= GATE.y1; y += 18) {
+    hexagon(ctx, GATE.x, y, 6);
+    stroke(ctx, GW, flash > 0 ? 1 + flash * 1.5 : 1);
+  }
+  ctx.save();
+  ctx.translate(GATE.x - 14, (GATE.y0 + GATE.y1) / 2);
+  ctx.rotate(-Math.PI / 2);
+  text(ctx, seen ? 'AGENTGATEWAY' : 'AGENTGATEWAY · NOT REPORTING', 0, 0, { size: 9, align: 'center', spacing: 3, color: GW });
+  ctx.restore();
+  ctx.globalAlpha = prev;
+}
+
+// fxPath is the route a gateway request takes on screen.
+function fxPath(fx) {
+  const p = PLANETS[fx.planet];
+  const end = fx.rock ? { x: fx.rock.x, y: fx.rock.y } : fx.to || { x: FIELD.x0 + 60, y: p.y };
+  const gy = Math.max(GATE.y0, Math.min(GATE.y1, end.y));
+  return fx.ingress
+    ? [{ x: p.x + p.r, y: p.y }, { x: GATE.x, y: gy }, end]
+    : [end, { x: GATE.x, y: gy }, { x: p.x + p.r, y: p.y }];
+}
+
+function along(pts, k) {
+  const segs = [];
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    segs.push(d);
+    total += d;
+  }
+  let t = k * total;
+  for (let i = 0; i < segs.length; i++) {
+    if (t <= segs[i]) {
+      const f = segs[i] ? t / segs[i] : 0;
+      return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * f, y: pts[i].y + (pts[i + 1].y - pts[i].y) * f };
+    }
+    t -= segs[i];
+  }
+  return pts[pts.length - 1];
+}
+
+export const FX_MS = 1800;
+
+function drawGatewayFx(ctx, world, now) {
+  const prev = ctx.globalAlpha;
+  for (const fx of world.gwFx || []) {
+    const k = (now - fx.born) / FX_MS;
+    if (k < 0 || k > 1) continue;
+    const fade = 1 - Math.max(0, (k - 0.7) / 0.3);
+    const pts = fxPath(fx);
+    ctx.globalAlpha = prev * fade * 0.8;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath();
+    pts.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
+    stroke(ctx, GW, 1.2);
+    ctx.setLineDash([]);
+    // the request travels out and the response comes back
+    const there = k < 0.5 ? k / 0.5 : 1 - (k - 0.5) / 0.5;
+    const dot = along(pts, there);
+    ctx.globalAlpha = prev * fade;
+    ctx.beginPath();
+    ctx.arc(dot.x, dot.y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = GW;
+    ctx.fill();
+    // the shield: the call left this sandbox only through the gateway
+    if (fx.rock) {
+      const r = 34 + Math.sin(k * Math.PI * 6) * 2;
+      hexagon(ctx, fx.rock.x, fx.rock.y, r);
+      stroke(ctx, GW, 1.8);
+    }
+    const mid = pts[1];
+    text(ctx, fx.label, mid.x + 10, mid.y - 8, { size: 8, spacing: 1, color: GW });
+  }
+  ctx.globalAlpha = prev;
 }

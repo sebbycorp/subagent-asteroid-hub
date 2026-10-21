@@ -51,4 +51,4 @@ run:
 	  -e KAGENT_API=$(KAGENT_API) -e KAGENT_GATEWAY=$(KAGENT_GATEWAY) $(IMAGE)
 
 dev:
-	LISTEN_ADDR=127.0.0.1:7790 KAGENT_API=http://localhost:8083 go run ./cmd/asteroids
+	LISTEN_ADDR=127.0.0.1:7790 OTLP_LISTEN_ADDR=127.0.0.1:4318 KAGENT_API=http://localhost:8083 go run ./cmd/asteroids

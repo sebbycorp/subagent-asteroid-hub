@@ -161,8 +161,12 @@ export function animating(an, uid) {
 
 // liveLine is the tour card's last line: the real, current state of what the
 // chapter is about (its actor, or the whole cluster for density).
-export function liveLine(tour, state) {
+export function liveLine(tour, state, gw = { llm: 0, tool: 0 }) {
   const actors = Object.values(state?.snapshot?.actors || {});
+  if (tour.kind === 'gateway') {
+    const n = (c, w) => `${c} ${w}${c === 1 ? '' : 'S'}`;
+    return `LIVE: AGENTGATEWAY HANDLED ${n(gw.llm, 'MODEL CALL')} · ${n(gw.tool, 'TOOL CALL')}`;
+  }
   if (tour.kind === 'density') {
     const workers = (state?.snapshot?.pools || []).reduce((n, p) => n + (p.workers || []).length, 0);
     const running = actors.filter((a) => a.state === 'running' || a.state === 'resuming').length;
@@ -174,4 +178,46 @@ export function liveLine(tour, state) {
   if (a.state === 'suspended') return `LIVE: SUSPENDED · SNAPSHOT GEN ${a.snapshotGen} · 0 CPU`;
   if (a.state === 'running') return `LIVE: RUNNING ON WORKER ${(a.worker || '').split('-').pop().toUpperCase()}`;
   return `LIVE: ${a.state.toUpperCase()}`;
+}
+
+// shortAgent drops the demo prefix so log lines fit the store's column.
+export function shortAgent(name) {
+  return (name || 'agent').replace(/^asteroids-demo-/, '').toUpperCase();
+}
+
+function clock(at) {
+  return new Date(at).toISOString().slice(11, 19);
+}
+
+function dur(ms) {
+  if (ms == null) return '';
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}S` : `${ms}MS`;
+}
+
+// logLine is one line of the log under the snapshot store: a lifecycle event
+// (src 'event') or a request agentgateway handled (src 'gateway').
+export function logLine(it) {
+  const t = clock(it.at);
+  if (it.src === 'gateway') {
+    if (it.kind === 'chat') return `${t} ⬡ CHAT IN → AGENT ${dur(it.durationMs)}`;
+    const to = it.kind === 'llm' ? (it.model || it.target) : it.tool;
+    return `${t} ⬡ ${shortAgent(it.agent)} → ${String(to).toUpperCase()} ${dur(it.durationMs)}`;
+  }
+  const a = shortAgent(it.agent);
+  switch (it.kind) {
+    case 'running':
+      if (it.startMs != null) return `${t} STARTED  ${a} ${dur(it.startMs)}`;
+      return `${t} RUNNING  ${a}${it.restoreMs != null ? ' ' + dur(it.restoreMs) : ''}`;
+    case 'suspend':
+      return `${t} SUSPEND  ${a}${it.suspendMs == null ? '' : it.suspendMs <= 10 ? ' INSTANT' : ' ' + dur(it.suspendMs)}`;
+    default:
+      return `${t} ${it.kind.toUpperCase().padEnd(8)} ${a}`;
+  }
+}
+
+// planetFor names the outside-world destination a gateway request reaches.
+export function planetFor(ev) {
+  if (ev.kind === 'chat') return { key: 'people', label: 'CHATS IN' };
+  if (ev.kind === 'tool') return { key: 'tools', label: 'K8S TOOLS' };
+  return { key: 'model', label: String(ev.model || ev.target).toUpperCase() };
 }

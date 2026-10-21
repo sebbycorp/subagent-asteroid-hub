@@ -4,8 +4,9 @@
 import {
   newQueue, schedule, due, pending, nextSuspend, rockShape, aimAngle, wrapLines, settled,
   newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
+  logLine, planetFor, DELAY_MS,
 } from './show.mjs';
-import { setup, draw, saucerSpots, vaultSlot, activeField } from './render.mjs';
+import { setup, draw, saucerSpots, vaultSlot, activeField, FX_MS, NEW, RESUMED, GW } from './render.mjs';
 
 const ACTIVE = new Set(['resuming', 'running', 'suspending']);
 const canvas = document.getElementById('stage');
@@ -28,6 +29,12 @@ const world = {
   tourLive: '',
   focusUids: [],
   splits: [],
+  gwFx: [], // agentgateway requests being drawn
+  gwPending: [], // agentgateway requests waiting for their display time
+  log: [], // lines under the snapshot store
+  modelLabel: '',
+  tourGw: { chapter: 0, llm: 0, tool: 0 },
+  gateFlash: -1e9,
 };
 const queue = newQueue();
 const captions = newCaptions();
@@ -61,6 +68,7 @@ function spawnRock(uid, info, from) {
   const F = activeField(!!world.tour);
   const r = {
     uid,
+    born: performance.now(),
     x: from ? from.x : F.x0 + Math.random() * (F.x1 - F.x0),
     y: from ? from.y + 30 : F.y0 + Math.random() * (F.y1 - F.y0),
     vx: Math.cos(angle) * speed,
@@ -106,8 +114,23 @@ function touch(uid) {
   endAnim(anims, uid, beginAnim(anims, uid));
 }
 
+const LOG_MAX = 60;
+
+function logPush(item, color) {
+  world.log.push({ text: logLine(item), color });
+  if (world.log.length > LOG_MAX) world.log.splice(0, world.log.length - LOG_MAX);
+}
+
+// tag colours a rock by where its state came from: a new session is cloned
+// from the agent's golden snapshot, a resumed one from its own snapshot.
+function setOrigin(r, origin, gen) {
+  r.origin = origin;
+  r.tag = origin === 'new' ? 'NEW · FROM GOLDEN SNAPSHOT' : `RESUMED · SNAPSHOT GEN ${gen ?? '?'}`;
+}
+
 function show(ev, now) {
   pushCaption(captions, ev, now);
+  logPush({ src: 'event', ...ev }, ev.kind === 'create' ? NEW : ev.kind === 'resume' ? RESUMED : undefined);
   const info = { ...actors()[ev.actorUid], agent: ev.agent, worker: ev.worker };
   const uid = ev.actorUid;
   switch (ev.kind) {
@@ -123,11 +146,13 @@ function show(ev, now) {
         r.vx = Math.cos(a) * 40; r.vy = Math.sin(a) * 40;
         if (parent.rock) { parent.rock.vx = -r.vx; parent.rock.vy = -r.vy; }
         r.sub = 'FORKED FROM CHECKPOINT';
+        setOrigin(r, 'resumed', actors()[uid]?.snapshotGen);
         world.splits.push({ x: parent.x, y: parent.y, born: now });
         break;
       }
       const r = spawnRock(uid, { ...info, state: 'resuming' }, saucerFor(ev.pool));
       r.sub = 'NEW SANDBOX';
+      setOrigin(r, 'new');
       break;
     }
     case 'resume': {
@@ -140,12 +165,17 @@ function show(ev, now) {
         if (!endAnim(anims, uid, tok)) return;
         const r = spawnRock(uid, { ...info, state: 'resuming' }, s);
         r.sub = 'RESUMING';
+        setOrigin(r, 'resumed', actors()[uid]?.snapshotGen);
       });
       break;
     }
     case 'running': {
       touch(uid);
-      const r = world.rocks.get(uid) || spawnRock(uid, info, saucerFor(ev.pool));
+      let r = world.rocks.get(uid);
+      if (!r) {
+        r = spawnRock(uid, info, saucerFor(ev.pool));
+        setOrigin(r, ev.startMs != null ? 'new' : 'resumed', info.snapshotGen);
+      }
       r.worker = ev.worker;
       r.sub = subLabel({ ...info, state: 'running' });
       break;
@@ -207,7 +237,39 @@ function updateTour() {
   world.tour = t && t.active ? t : null;
   const ids = new Set(world.tour?.focus || []);
   world.focusUids = Object.values(actors()).filter((a) => ids.has(a.sessionId)).map((a) => a.uid);
-  world.tourLive = world.tour ? liveLine(world.tour, world.state) : '';
+  if (world.tour && world.tour.chapter !== world.tourGw.chapter) {
+    world.tourGw = { chapter: world.tour.chapter, llm: 0, tool: 0 };
+  }
+  world.tourLive = world.tour ? liveLine(world.tour, world.state, world.tourGw) : '';
+}
+
+// tourAgent is the agent behind the tour's main session, if any.
+function tourAgent() {
+  const sid = world.tour?.focus?.[0];
+  return Object.values(actors()).find((a) => a.sessionId === sid)?.agent;
+}
+
+// showGateway draws a request agentgateway handled: a shield around the
+// calling agent's asteroid and a beam through the gate to where it went.
+function showGateway(ev, now) {
+  const planet = planetFor(ev);
+  if (ev.kind === 'llm') world.modelLabel = planet.label;
+  let rock = null;
+  if (ev.agent) {
+    for (const r of world.rocks.values()) {
+      if (r.agent === ev.agent && !r.dying && (!rock || r.born > rock.born)) rock = r;
+    }
+  }
+  const label = ev.kind === 'chat' ? 'A2A CHAT IN' : ev.kind === 'tool' ? `TOOL ${String(ev.tool).toUpperCase()}` : planet.label;
+  const to = ev.kind === 'chat' ? saucerFor((pools()[0] || {}).name) : null;
+  world.gwFx.push({ rock, planet: planet.key, label, born: now, ingress: ev.direction === 'ingress', to: to && { x: to.x, y: to.y + 20 } });
+  world.gateFlash = now;
+  logPush({ src: 'gateway', ...ev }, GW);
+  if (world.tour?.kind === 'gateway' && ev.agent && ev.agent === tourAgent()) {
+    if (ev.kind === 'llm') world.tourGw.llm++;
+    if (ev.kind === 'tool') world.tourGw.tool++;
+    world.tourLive = liveLine(world.tour, world.state, world.tourGw);
+  }
 }
 
 // ── state reconciliation ───────────────────────────────────────────────────
@@ -244,7 +306,11 @@ function reconcile() {
     mismatchSince.delete(uid);
     if (want === 'rock') {
       world.vault.delete(uid);
-      const r = world.rocks.get(uid) || spawnRock(uid, a, null);
+      let r = world.rocks.get(uid);
+      if (!r) {
+        r = spawnRock(uid, a, null);
+        setOrigin(r, a.snapshotGen > 0 ? 'resumed' : 'new', a.snapshotGen);
+      }
       r.agent = a.agent;
       r.worker = a.worker;
       r.sub = subLabel(a);
@@ -275,6 +341,9 @@ function connectStream() {
       updateHelp();
     } else if (msg.type === 'event') {
       schedule(queue, msg.event, performance.now());
+    } else if (msg.type === 'gateway') {
+      // shown on the same delay as lifecycle events so it lines up with them
+      world.gwPending.push({ ev: msg.gateway, at: performance.now() + DELAY_MS });
     }
   };
   es.onerror = () => {
@@ -371,6 +440,8 @@ function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
   for (const ev of due(queue, now)) show(ev, now);
+  while (world.gwPending.length && world.gwPending[0].at <= now) showGateway(world.gwPending.shift().ev, now);
+  world.gwFx = world.gwFx.filter((fx) => now - fx.born < FX_MS);
   world.captionLines = wrapLines(currentCaption(captions, now) ?? world.idleCaption, 96);
 
   const F = activeField(!!world.tour);
