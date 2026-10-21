@@ -18,10 +18,11 @@ store the instant each turn ends.*
 | On screen | In Agent Substrate |
 |-----------|--------------------|
 | UFO saucer | a **WorkerPool**; the small bays under it are its **workers** (lit while hosting an actor) |
-| Rock launched from a saucer | an actor being **created** (a new session gets a fresh gVisor sandbox) |
-| Capsule rising from the store, then the same rock relaunching | a **resume**: the actor's snapshot is restored onto a worker |
-| Rock drifting, labelled `RUNNING ON WORKER …` | an actor **running** a turn |
-| Ship fires, rock breaks up, capsule drops into the store | a **suspend**: memory and disk are checkpointed to S3 and the worker is freed |
+| Alien scout launched from the kagent mothership | an actor being **created** (a new session gets a fresh gVisor sandbox); four scout designs, each session always the same one |
+| Capsule rising from the store, then the same scout relaunching | a **resume**: the actor's snapshot is restored onto a worker |
+| Scout flying and growing, labelled `RUNNING ON WORKER …` | an actor **running** a turn (it powers up while its sandbox works) |
+| Fighter fires, scout breaks up, capsule drops into the store | a **suspend**: memory and disk are checkpointed to S3 and the worker is freed |
+| Grey, dashed, frozen scout with its alien pilot holding up a sign | **human in the loop**: the agent asked to run a tool and is suspended (0 CPU) until someone presses `Y` or `X` |
 | Snapshot store | every suspended actor, stored at 0 CPU and 0 memory, with a live log underneath |
 | Cyan rock / amber rock | a **new** session (cloned from the agent's golden snapshot) / a **resumed** one (restored from its own snapshot, generation shown) |
 | Planets on the left, behind a hexagon gate | the outside world (your model, MCP tools, people chatting in) behind **agentgateway** |
@@ -37,7 +38,7 @@ the total number of suspends.
 
 ## Guided tour
 
-Press `N` (or click **▶ TOUR**) for a six-chapter lesson. A card floats over
+Press `N` (or click **▶ TOUR**) for a seven-chapter lesson. A card floats over
 the live show while each chapter does something real on the cluster:
 
 | Chapter | What happens on the cluster | What it teaches |
@@ -47,7 +48,8 @@ the live show while each chapter does something real on the cluster:
 | 3 · Resume | asks "what was the code word?" | the snapshot is restored onto a worker in ~100 ms and the agent answers ORION: state survived |
 | 4 · Fork | checkpoints the session and forks a new one from it, then asks the fork | the asteroid splits in two, and the fork answers ORION too |
 | 5 · Agentgateway | asks the agent a cluster question it must use a tool for | its model call and tool call both leave the sandbox through agentgateway (shield + beams); the agent holds no keys |
-| 6 · Density | sends a wave across every agent | sessions hold a worker only while thinking: many agents, few machines |
+| 6 · Human in the loop | asks `asteroids-demo-ops` (tools need approval) a cluster question | it pauses to ask; Substrate freezes it (0 CPU) while it waits; its pilot holds up the request; `Y`/`X` resumes it |
+| 7 · Density | sends a wave across every agent | sessions hold a worker only while thinking: many agents, few machines |
 
 ![The guided tour: create, suspend, resume (the agent still knows ORION), and fork](docs/media/tour.gif)
 
@@ -112,6 +114,7 @@ Without Docker, run `make dev`.
 | Key | Action |
 |-----|--------|
 | `N` | start the guided tour / next chapter (`Esc` ends it) |
+| `Y` / `X` | approve / reject the tool call a frozen scout's pilot is holding up |
 | `T` | send a wave of chats now |
 | `A` | toggle automatic waves |
 | `D` | create three small demo agents (only if the namespace has no ready agents) |

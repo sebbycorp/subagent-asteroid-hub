@@ -160,37 +160,148 @@ function drawSaucer(ctx, s, busyWorkers, now, beamAt) {
   text(ctx, `KAGENT WORKER POOL · ${workers.length} WORKER${workers.length === 1 ? '' : 'S'}`, x, y + 54, { size: 7, align: 'center', color: DIM, spacing: 1 });
 }
 
-function drawRock(ctx, r) {
+export const ALIEN = '#9dff6b'; // the pilot who asks a human for approval
+
+// drawScout draws a session's sandbox as a little alien scout ship, facing
+// where it flies, in one of four designs; it powers up (grows) while working.
+// A frozen scout (waiting for a human) is grey and dashed, with its pilot out
+// on the hull holding up the request.
+function drawScout(ctx, r, now, approval) {
   const sc = r.scale || 1;
-  poly(ctx, r.shape, r.x, r.y, r.rot, sc);
-  stroke(ctx, r.failed ? RED : originColor(r));
+  const color = r.frozen ? DIM : r.failed ? RED : originColor(r);
+  ctx.save();
+  ctx.translate(r.x, r.y);
+  ctx.rotate(r.rot);
+  ctx.scale(sc, sc);
+  const lw = 1.5 / sc;
+  if (r.frozen) ctx.setLineDash([3 / sc, 3 / sc]);
+  // engine flame (not when frozen)
+  if (!r.frozen && !r.dying) {
+    const f = 5 + Math.random() * 7;
+    ctx.beginPath();
+    ctx.moveTo(-11, -2.5); ctx.lineTo(-11 - f, 0); ctx.lineTo(-11, 2.5);
+    stroke(ctx, RESUMED, 1.1 / sc);
+  }
+  ctx.beginPath();
+  switch (r.kind) {
+    case 'saucer':
+      ctx.ellipse(0, 0, 16, 7, 0, 0, Math.PI * 2);
+      ctx.moveTo(-7, -3); ctx.ellipse(1, -3, 8, 7, 0, Math.PI, 0);
+      stroke(ctx, color, lw);
+      for (const [lx, ly, ph] of [[-9, 1, 0], [0, 3.5, 1], [9, 1, 2]]) {
+        ctx.beginPath();
+        ctx.arc(lx, ly, 1.3, 0, Math.PI * 2);
+        ctx.fillStyle = (Math.floor(now / 250) + ph) % 3 && !r.frozen ? color : DIM;
+        ctx.fill();
+      }
+      break;
+    case 'dart':
+      poly(ctx, [[17, 0], [-6, -8], [-11, -12], [-8, 0], [-11, 12], [-6, 8]], 0, 0);
+      ctx.moveTo(4, -3); ctx.lineTo(10, 0); ctx.lineTo(4, 3);
+      ctx.moveTo(-6, -8); ctx.lineTo(-2, 0); ctx.lineTo(-6, 8);
+      stroke(ctx, color, lw);
+      break;
+    case 'crab':
+      poly(ctx, [[10, -8], [10, -3], [14, -3], [14, 3], [10, 3], [10, 8], [-4, 8], [-4, 12], [-10, 12], [-10, -12], [-4, -12], [-4, -8]], 0, 0);
+      stroke(ctx, color, lw);
+      for (const ey of [-4, 4]) { ctx.beginPath(); ctx.rect(3, ey - 1.5, 3, 3); ctx.fillStyle = color; ctx.fill(); }
+      break;
+    default: // orb
+      ctx.arc(0, 0, 10, 0, Math.PI * 2);
+      ctx.moveTo(5, 0); ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      for (const a of [0.8, 2.35, 3.9, 5.5]) {
+        ctx.moveTo(Math.cos(a) * 10, Math.sin(a) * 10);
+        ctx.lineTo(Math.cos(a) * 15, Math.sin(a) * 15);
+      }
+      stroke(ctx, color, lw);
+      for (const a of [0.8, 2.35, 3.9, 5.5]) {
+        ctx.beginPath(); ctx.arc(Math.cos(a) * 15.5, Math.sin(a) * 15.5, 1.4, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+      }
+  }
+  ctx.restore();
+  ctx.setLineDash([]);
   // dashed leader to the label
-  const lx = r.x + 34 * sc, ly = r.y - 22 * sc;
+  const lx = r.x + 30 * sc, ly = r.y - 22 * sc;
   ctx.setLineDash([2, 3]);
   ctx.beginPath();
-  ctx.moveTo(r.x + 20 * sc, r.y - 10 * sc);
+  ctx.moveTo(r.x + 16 * sc, r.y - 10 * sc);
   ctx.lineTo(lx - 4, ly + 4);
   stroke(ctx, DIM, 1);
   ctx.setLineDash([]);
   text(ctx, r.agent, lx, ly, { size: 10, spacing: 1 });
-  text(ctx, r.sub, lx, ly + 13, { size: 9, spacing: 1, color: DIM });
+  text(ctx, r.sub, lx, ly + 13, { size: 9, spacing: 1, color: r.frozen ? ALIEN : DIM });
   if (r.tag) text(ctx, r.tag, lx, ly + 25, { size: 8, spacing: 1, color: originColor(r) });
+  if (r.frozen && approval) drawPilot(ctx, r.x, r.y - 18 * sc, now, approval);
 }
 
+// drawPilot draws the little alien who climbs out of a frozen scout and
+// holds up the tool call it wants a human to approve.
+function drawPilot(ctx, x, y, now, ap) {
+  const bob = Math.sin(now / 300) * 1.5;
+  y += bob;
+  // body, legs
+  ctx.beginPath();
+  ctx.moveTo(x - 4, y); ctx.lineTo(x - 5, y + 9); ctx.lineTo(x + 5, y + 9); ctx.lineTo(x + 4, y);
+  ctx.moveTo(x - 3, y + 9); ctx.lineTo(x - 4, y + 13); ctx.moveTo(x + 3, y + 9); ctx.lineTo(x + 4, y + 13);
+  stroke(ctx, ALIEN, 1.4);
+  // head with big eyes and antennae
+  ctx.beginPath();
+  ctx.ellipse(x, y - 6, 7, 6, 0, 0, Math.PI * 2);
+  stroke(ctx, ALIEN, 1.4);
+  for (const ex of [-3, 3]) { ctx.beginPath(); ctx.ellipse(x + ex, y - 6, 1.8, 2.6, ex * 0.1, 0, Math.PI * 2); ctx.fillStyle = ALIEN; ctx.fill(); }
+  ctx.beginPath();
+  ctx.moveTo(x - 3, y - 11); ctx.lineTo(x - 6, y - 17); ctx.moveTo(x + 3, y - 11); ctx.lineTo(x + 6, y - 17);
+  stroke(ctx, ALIEN, 1.2);
+  for (const ax of [-6, 6]) { ctx.beginPath(); ctx.arc(x + ax, y - 17.5, 1.5, 0, Math.PI * 2); ctx.fillStyle = ALIEN; ctx.fill(); }
+  // waving arm up to the sign
+  const wave = Math.sin(now / 180) * 0.25;
+  const hx = x + 12 + Math.cos(-1 + wave) * 2, hy = y - 14 + Math.sin(-1 + wave) * 2;
+  ctx.beginPath();
+  ctx.moveTo(x + 4, y + 2); ctx.lineTo(hx, hy);
+  stroke(ctx, ALIEN, 1.3);
+  // the sign: what it wants to run, and how to answer
+  const tool = (ap.tools?.[0]?.name || 'A TOOL').toUpperCase();
+  const lines = [`RUN ${tool}?`, 'Y APPROVE · X REJECT'];
+  ctx.font = `9px ${FONT}`;
+  ctx.letterSpacing = '1px';
+  const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 14;
+  const sx = hx - 6, sy = hy - 34;
+  ctx.fillStyle = 'rgba(0,0,0,0.85)';
+  ctx.fillRect(sx, sy, w, 28);
+  ctx.beginPath();
+  ctx.rect(sx, sy, w, 28);
+  stroke(ctx, Math.floor(now / 450) % 2 ? ALIEN : INK, 1.3);
+  ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx, sy + 28); stroke(ctx, ALIEN, 1);
+  text(ctx, lines[0], sx + 7, sy + 12, { size: 9, spacing: 1, color: ALIEN });
+  text(ctx, lines[1], sx + 7, sy + 23, { size: 8, spacing: 1, color: INK });
+}
+
+// drawShip draws the fighter that marks each freeze: a swept-wing ship with a
+// lit cockpit, twin engines and wingtip lights.
 export function drawShip(ctx, ship) {
-  const pts = [[16, 0], [-11, -9], [-6, 0], [-11, 9]];
-  poly(ctx, pts, ship.x, ship.y, ship.a);
-  stroke(ctx);
-  // engine flame
-  const f = 7 + Math.random() * 7;
-  poly(ctx, [[-7, -3.5], [-7 - f, 0], [-7, 3.5]], ship.x, ship.y, ship.a);
-  stroke(ctx, RESUMED, 1);
-  if (ship.flash > 0) {
+  ctx.save();
+  ctx.translate(ship.x, ship.y);
+  ctx.rotate(ship.a);
+  ctx.scale(1.25, 1.25);
+  const hull = [[20, 0], [7, -4], [-6, -14], [-11, -14], [-6, -5], [-10, -5], [-10, 5], [-6, 5], [-11, 14], [-6, 14], [7, 4]];
+  poly(ctx, hull, 0, 0);
+  ctx.moveTo(-2, -8); ctx.lineTo(6, -4); ctx.moveTo(-2, 8); ctx.lineTo(6, 4);
+  stroke(ctx, INK, 1.2);
+  ctx.beginPath();
+  ctx.ellipse(8, 0, 4.5, 2.2, 0, 0, Math.PI * 2);
+  stroke(ctx, GW, 1.1);
+  for (const ey of [-3, 3]) {
+    const f = 6 + Math.random() * 8;
     ctx.beginPath();
-    ctx.moveTo(ship.x - Math.cos(ship.a) * 8, ship.y - Math.sin(ship.a) * 8);
-    ctx.lineTo(ship.x - Math.cos(ship.a) * 18, ship.y - Math.sin(ship.a) * 18);
-    stroke(ctx, INK, 1);
+    ctx.moveTo(-10, ey - 1.6); ctx.lineTo(-10 - f, ey); ctx.lineTo(-10, ey + 1.6);
+    stroke(ctx, RESUMED, 1);
   }
+  ctx.beginPath(); ctx.arc(-9, -14, 1.3, 0, Math.PI * 2); ctx.fillStyle = RED; ctx.fill();
+  ctx.beginPath(); ctx.arc(-9, 14, 1.3, 0, Math.PI * 2); ctx.fillStyle = ALIEN; ctx.fill();
+  if (ship.flash > 0) {
+    ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(28, 0); stroke(ctx, INK, 1.4);
+  }
+  ctx.restore();
 }
 
 export function vaultSlot(i) {
@@ -288,7 +399,7 @@ export function draw(ctx, world, now) {
   drawLog(ctx, world.log || []);
   drawGatewayPlanet(ctx, world, now);
   drawLegend(ctx);
-  for (const r of world.rocks.values()) drawRock(ctx, r);
+  for (const r of world.rocks.values()) drawScout(ctx, r, now, world.approvalByUid?.get(r.uid));
   drawGatewayFx(ctx, world, now);
   for (const f of world.fragments) {
     ctx.globalAlpha = Math.max(0, 1 - (now - f.born) / 1200) * (dim ? 0.35 : 1);

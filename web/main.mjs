@@ -2,11 +2,11 @@
 // rocks, capsules and explosions only start from real, displayed events, and
 // each state message reconciles anything no event is about to change.
 import {
-  newQueue, schedule, due, pending, nextSuspend, rockShape, aimAngle, wrapLines, settled,
+  newQueue, schedule, due, pending, nextSuspend, scoutKind, scoutOutline, aimAngle, wrapLines, settled,
   newCaptions, pushCaption, currentCaption, newAnims, beginAnim, endAnim, animating, liveLine,
   logLine, portFor, attribute, growScale, fxDuration, fxLabel, llmTiming, DELAY_MS,
 } from './show.mjs';
-import { setup, draw, saucerSpots, vaultSlot, activeField, gatewayPos, NEW, RESUMED, GW } from './render.mjs';
+import { setup, draw, saucerSpots, vaultSlot, activeField, gatewayPos, NEW, RESUMED, GW, ALIEN } from './render.mjs';
 
 const ACTIVE = new Set(['resuming', 'running', 'suspending']);
 const canvas = document.getElementById('stage');
@@ -35,6 +35,8 @@ const world = {
   modelLabel: '',
   tourGw: { chapter: 0, llm: 0, tool: 0 },
   shipFlash: -1e9,
+  approvals: new Map(), // sessionId → turn waiting for a person
+  approvalByUid: new Map(),
   beamAt: {}, // pool → when its saucer last launched an asteroid (tractor beam)
 };
 const queue = newQueue();
@@ -77,9 +79,9 @@ function spawnRock(uid, info, from) {
     y: from ? from.y + 30 : F.y0 + Math.random() * (F.y1 - F.y0),
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
-    rot: 0,
-    spin: (Math.random() - 0.5) * 0.6,
-    shape: rockShape(uid),
+    rot: angle,
+    kind: scoutKind(uid),
+    shape: scoutOutline(scoutKind(uid)),
     agent: info.agent || 'agent',
     worker: info.worker || '',
     sub: subLabel(info),
@@ -98,10 +100,11 @@ function vaultPos() {
 }
 
 function explode(r, now) {
-  const sc = r.scale || 1;
+  const sc = r.scale || 1, c = Math.cos(r.rot), sn = Math.sin(r.rot);
+  const at = ([px, py]) => [(px * c - py * sn) * sc, (px * sn + py * c) * sc]; // hull in the ship's heading
   for (let i = 0; i < r.shape.length; i++) {
-    const [ax, ay] = r.shape[i].map((v) => v * sc);
-    const [bx, by] = r.shape[(i + 1) % r.shape.length].map((v) => v * sc);
+    const [ax, ay] = at(r.shape[i]);
+    const [bx, by] = at(r.shape[(i + 1) % r.shape.length]);
     const a = Math.atan2(by - ay, bx - ax);
     const out = Math.atan2(ay + by, ax + bx);
     world.fragments.push({
@@ -161,7 +164,11 @@ function show(ev, now) {
       break;
     }
     case 'resume': {
-      if (world.rocks.has(uid)) { touch(uid); break; }
+      if (world.rocks.has(uid)) {
+        touch(uid);
+        thaw(world.rocks.get(uid), now); // a person decided: it wakes up
+        break;
+      }
       const from = world.vault.has(uid) ? vaultSlot([...world.vault].indexOf(uid)) : vaultPos();
       world.vault.delete(uid);
       const tok = beginAnim(anims, uid);
@@ -187,6 +194,13 @@ function show(ev, now) {
       break;
     }
     case 'suspend': {
+      if (approvalFor(uid)) {
+        // waiting for a human: Substrate froze it, but it stays in the field
+        // with its pilot out holding up the request (see freeze)
+        touch(uid);
+        freeze(world.rocks.get(uid) || spawnRock(uid, info, null));
+        break;
+      }
       const r = world.rocks.get(uid);
       const tok = beginAnim(anims, uid);
       const store = () => { if (endAnim(anims, uid, tok)) world.vault.add(uid); };
@@ -281,6 +295,52 @@ function showGateway(ev, now) {
 
 // ── state reconciliation ───────────────────────────────────────────────────
 
+// ── human in the loop ──────────────────────────────────────────────────────
+
+// approvalFor is the request an actor's session is waiting on, if any.
+function approvalFor(uid) {
+  const sid = actors()[uid]?.sessionId;
+  return sid ? world.approvals.get(sid) : undefined;
+}
+
+function freeze(r) {
+  if (!r || r.frozen) return;
+  r.frozen = true;
+  r.saved = { vx: r.vx, vy: r.vy };
+  r.vx = r.vy = 0;
+  r.sub = 'FROZEN · WAITING FOR YOU · 0 CPU';
+}
+
+function thaw(r, now) {
+  if (!r || !r.frozen) return;
+  r.frozen = false;
+  ({ vx: r.vx, vy: r.vy } = r.saved || { vx: 20, vy: 20 });
+  r.runSince = now;
+  r.sub = 'RESUMING';
+}
+
+// syncApprovals tracks the board from state; a new request gets a caption
+// and a log line, and its ship freezes.
+function syncApprovals(list) {
+  const next = new Map((list || []).map((p) => [p.sessionId, p]));
+  for (const [sid, p] of next) {
+    if (world.approvals.has(sid)) continue;
+    const tool = (p.tools?.[0]?.name || 'a tool').toUpperCase();
+    const who = (p.agent || 'agent').toUpperCase();
+    pushCaption(captions, { kind: 'hitl', caption: `${who} WANTS TO RUN ${tool}. SUBSTRATE FROZE IT WHILE IT WAITS FOR YOU: 0 CPU. PRESS Y OR X.` }, performance.now());
+    world.log.push({ text: `${new Date().toISOString().slice(11, 19)} ⏸ ${who.replace(/^ASTEROIDS-DEMO-/, '')} ASKS: ${tool}`, color: ALIEN });
+  }
+  world.approvals = next;
+  world.approvalByUid = new Map();
+  for (const a of Object.values(actors())) {
+    const p = next.get(a.sessionId);
+    if (p) {
+      world.approvalByUid.set(a.uid, p);
+      if (a.state === 'suspended') freeze(world.rocks.get(a.uid));
+    }
+  }
+}
+
 const mismatchSince = new Map();
 let seeded = false;
 
@@ -297,7 +357,8 @@ function reconcile() {
       continue;
     }
     const a = as[uid];
-    const want = !a ? 'none' : ACTIVE.has(a.state) ? 'rock' : a.state === 'suspended' ? 'vault' : 'keep';
+    const waiting = a && a.state === 'suspended' && world.approvals.has(a.sessionId);
+    const want = !a ? 'none' : ACTIVE.has(a.state) || waiting ? 'rock' : a.state === 'suspended' ? 'vault' : 'keep';
     const have = world.rocks.has(uid) ? 'rock' : world.vault.has(uid) ? 'vault' : 'none';
     if (want === 'keep') continue;
     if (want === have) {
@@ -305,7 +366,7 @@ function reconcile() {
       if (want === 'rock') world.vault.delete(uid); // never both at once
       if (want === 'rock') {
         const r = world.rocks.get(uid);
-        if (!r.dying) { r.agent = a.agent; r.worker = a.worker; r.sub = subLabel(a); }
+        if (!r.dying && !r.frozen) { r.agent = a.agent; r.worker = a.worker; r.sub = subLabel(a); }
       }
       continue;
     }
@@ -344,6 +405,7 @@ function connectStream() {
       world.idleCaption = msg.state.connected
         ? 'CONNECTED. EVERY ROCK IS A LIVE SANDBOX · EVERY CAPSULE A SNAPSHOT IN STORAGE.'
         : 'WAITING FOR SUBSTRATE…';
+      syncApprovals(msg.state.approvals);
       reconcile();
       updateTour();
       updateHelp();
@@ -375,7 +437,7 @@ async function post(path, body = {}) {
 function updateHelp() {
   const w = world.state?.waves || {};
   const flight = w.inFlight ? `  ·  ${w.inFlight} CHAT${w.inFlight === 1 ? '' : 'S'} IN FLIGHT` : '';
-  world.help = `N TOUR  ·  T WAVE  ·  A AUTO WAVES ${w.auto ? 'ON' : 'OFF'}  ·  D DEMO AGENTS  ·  C SETTINGS  ·  F FULLSCREEN${flight}`;
+  world.help = `N TOUR  ·  Y/X APPROVE  ·  T WAVE  ·  A AUTO WAVES ${w.auto ? 'ON' : 'OFF'}  ·  D DEMO AGENTS  ·  C SETTINGS  ·  F FULLSCREEN${flight}`;
 }
 
 const overlay = document.getElementById('connect');
@@ -424,6 +486,12 @@ window.addEventListener('keydown', async (e) => {
     if (!ok) toast(data.error || 'tour failed');
   } else if (k === 'escape' && world.tour) {
     await post('/api/tour', { action: 'stop' });
+  } else if (k === 'y' || k === 'x') {
+    // answer the request a pilot is holding up (the oldest on screen)
+    const p = [...world.approvals.values()][0];
+    if (!p) { toast('NOBODY IS WAITING FOR A DECISION'); return; }
+    const { ok, data } = await post('/api/approval', { sessionId: p.sessionId, taskId: p.taskId, approved: k === 'y' });
+    toast(ok ? (k === 'y' ? 'APPROVED: IT RESUMES' : 'REJECTED: IT RESUMES AND IS TOLD NO') : data.error || 'decision failed');
   } else if (k === 't') {
     const { ok, data } = await post('/api/wave');
     toast(ok ? `WAVE: ${data.sent} CHAT${data.sent === 1 ? '' : 'S'} SENT` : (data.error || 'wave failed'));
@@ -456,8 +524,8 @@ function frame(now) {
   for (const r of world.rocks.values()) {
     r.x += r.vx * dt;
     r.y += r.vy * dt;
-    r.rot += r.spin * dt;
-    if (r.runSince && !r.dying) r.scale = growScale(now - r.runSince);
+    if (r.vx || r.vy) r.rot = Math.atan2(r.vy, r.vx); // scouts face where they fly
+    if (r.runSince && !r.dying && !r.frozen) r.scale = growScale(now - r.runSince);
     const w = F.x1 - F.x0, h = F.y1 - F.y0;
     if (r.x < F.x0) {
       if (world.tour) {
