@@ -7,7 +7,7 @@ a real cluster, read from the kagent 1.0 API. Press `T` and the app sends a
 wave of real chats to your agents. It never chats on its own unless you turn
 automatic waves on.
 
-![A wave of real chats: four agents launch from the worker pool, run, and are frozen into the snapshot store](docs/media/show.gif)
+![A wave of real chats: the kagent robot's cannon fires the agents out as asteroids, they run, and the rocket shoots each one down into the snapshot store as it suspends](docs/media/show.gif)
 
 *A wave of real chats on a local kind cluster: four agents launch from the
 worker pool's saucer, run on its one worker, and are frozen into the snapshot
