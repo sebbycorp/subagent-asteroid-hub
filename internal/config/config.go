@@ -54,7 +54,8 @@ func FromEnv(lookup func(string) (string, bool)) (Config, error) {
 		return Config{}, fmt.Errorf("WAVE_INTERVAL: %w", err)
 	}
 	c.WaveInterval = d
-	if c.AutoWaves, err = boolean("AUTO_WAVES", true); err != nil {
+	// Chats cost model tokens, so waves are manual (T) unless asked for.
+	if c.AutoWaves, err = boolean("AUTO_WAVES", false); err != nil {
 		return Config{}, err
 	}
 	if c.DemoAgents, err = boolean("DEMO_AGENTS", false); err != nil {
